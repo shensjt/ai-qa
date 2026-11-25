@@ -55,13 +55,20 @@ make check        # lint + typecheck + test
 make doctor       # 对示例配置运行 doctor（预期报错，见 README）
 ```
 
-`make test-contract`、`make test-e2e`、`make eval-rag` 已保留；在 Phase 3/4 引入对应测试前，它们会明确提示“尚无测试”，不会伪造通过。
+`make test-contract` 运行真实 MCP 契约测试（独立 Server 子进程 + 假目标）；`make test-e2e`、`make eval-rag` 在对应阶段之前会明确提示“尚无测试”，不会伪造通过。
+
+固定计划 E2E：
+
+```bash
+uv run ai-qa run --plan examples/plans/http_smoke.json --config config/settings.yaml
+```
 
 ## 测试约定
 
 - `pytest` 默认只跑不需要真实 LLM/真实 C++ 目标的测试。
 - 需要真实 LLM 的测试标记 `agent_llm`，默认不进入 CI。
 - 契约测试标记 `contract`，端到端标记 `e2e`，评估标记 `eval`，真实目标集成标记 `integration`。
+- MCP 契约测试（`tests/contract/test_mcp_server.py`）启动真实 `ai_qa.mcp_server` 子进程，但使用内置假目标，不需要 C++ 二进制或 API Key。
 - 真实 C++ 目标测试（`tests/integration/test_real_webserver.py`）默认使用 `/home/cpp/CPP/build/server/web_server`，可用 `AI_QA_CPP_SERVER` 指定其他路径；目标不存在时明确 skip，不伪装通过。
 - 不删除或放宽失败断言来制造通过；无法运行的命令与未验证项必须如实报告。
 
@@ -72,7 +79,7 @@ make doctor       # 对示例配置运行 doctor（预期报错，见 README）
 | 0 | 仓库与工程骨架 | 已完成 |
 | 1 | 领域模型、Catalog、Validator、Repository | 已完成 |
 | 2 | C++ Target、6 条 HTTP 用例、Rule | 已完成 |
-| 3 | 真实 MCP Server 与固定计划 E2E | 未开始 |
+| 3 | 真实 MCP Server 与固定计划 E2E | 已完成 |
 | 4 | Qwen Embedding、Chroma、BM25 | 未开始 |
 | 5 | DeepSeek Agent 与修复循环 | 未开始 |
 | 6 | wrk、报告与 Demo | 未开始 |
@@ -84,8 +91,9 @@ make doctor       # 对示例配置运行 doctor（预期报错，见 README）
 src/ai_qa/
 ├─ __init__.py       # 版本
 ├─ __main__.py       # python -m ai_qa
-├─ cli.py            # Typer 入口
+├─ cli.py            # Typer 入口（doctor / run）
 ├─ settings.py       # Pydantic 配置模型与加载
+├─ bootstrap.py      # composition root：路径解析、DB、Catalog、Service 装配
 ├─ doctor.py         # 只读环境诊断
 ├─ log.py            # JSON 日志与脱敏
 ├─ domain/
@@ -93,7 +101,7 @@ src/ai_qa/
 │  ├─ errors.py      # ErrorCode / ErrorInfo / AiQaError / 退出码
 │  ├─ models.py      # TestRun 与 ID 生成
 │  ├─ plans.py       # TestPlan / ResolvedPlanItem / StoredPlan / plan_hash
-│  └─ results.py     # CaseFacts / Assertion / CaseResult / ToolResult
+│  └─ results.py     # CaseFacts / Assertion / CaseResult / ToolResult / RunResult
 ├─ validation/
 │  ├─ catalog.py     # Case Catalog 加载与完整性校验
 │  ├─ params.py      # 参数类型与 request-target 安全规则
@@ -115,12 +123,21 @@ src/ai_qa/
 ├─ rules/
 │  ├─ http_rules.py  # 确定性断言
 │  └─ evaluator.py   # CaseFacts → CaseResult（唯一 verdict 来源）
+├─ adapters/
+│  ├─ mcp_client.py  # 官方 SDK stdio 客户端（initialize/list/call）
+│  └─ trace.py       # JSONL 协议 trace
+├─ mcp_server/
+│  ├─ __main__.py    # python -m ai_qa.mcp_server
+│  ├─ server.py      # 工具声明、调用分发、stdio 入口
+│  ├─ tools.py       # 服务端复验 + ExecutionService
+│  └─ schemas.py     # 工具输入/输出 JSON Schema
 └─ application/
-   ├─ ports.py       # Repository / ArtifactStore / Target / Executor / Evaluator 协议
-   └─ execution_service.py  # 启停目标 + 逐条执行 + 持久化
+   ├─ ports.py       # Repository / ArtifactStore / Target / Executor / Evaluator / Gateway 协议
+   ├─ execution_service.py  # 启停目标 + 逐条执行 + 持久化
+   └─ fixed_plan_runner.py  # 固定计划 E2E 编排（CLI）
 ```
 
-依赖方向：`cli/doctor/validation/persistence/artifacts` → `application.ports`/`domain`。`domain` 不导入任何第三方框架；Repository 不跨线程共享 Session。
+依赖方向：`cli/validation/persistence/artifacts/execution/rules/adapters/mcp_server` → `application.ports`/`domain`。`domain` 不导入任何第三方框架；Repository 不跨线程共享 Session；MCP Server 只读绝对路径环境变量，不依赖父进程内存。
 
 ## 提交约定
 

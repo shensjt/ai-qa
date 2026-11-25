@@ -9,7 +9,7 @@ from typing import Any, Self
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from ai_qa.domain.enums import PlanMode, PlanStatus
-from ai_qa.domain.errors import ErrorCode
+from ai_qa.domain.errors import AiQaError, ErrorCode
 from ai_qa.domain.models import new_id, utc_now
 from ai_qa.domain.plans import (
     ResolvedPlanItem,
@@ -57,6 +57,18 @@ class ValidationResult(BaseModel):
     @property
     def ok(self) -> bool:
         return self.plan is not None and not self.issues
+
+
+class PlanValidationError(AiQaError):
+    """计划校验失败；保留逐条 issue 供 CLI 展示。"""
+
+    def __init__(self, issues: list[ValidationIssue]) -> None:
+        super().__init__(
+            ErrorCode.PLAN_SCHEMA_INVALID,
+            f"计划未通过校验（{len(issues)} 项）",
+            details={"issue_count": len(issues)},
+        )
+        self.issues = issues
 
 
 def _format_loc(loc: tuple[Any, ...]) -> str:

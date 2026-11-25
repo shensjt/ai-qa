@@ -6,7 +6,9 @@ Phase 1 只定义已经实现并由 Repository/ArtifactStore 满足的接口。
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
+
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from ai_qa.domain.models import TestRun
 from ai_qa.domain.plans import ResolvedPlanItem, StoredPlan
@@ -101,3 +103,37 @@ class TestExecutor(Protocol):
 
 class RuleEvaluator(Protocol):
     def evaluate_case(self, item: ResolvedPlanItem, facts: CaseFacts) -> CaseResult: ...
+
+
+class ToolCall(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    arguments: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class ToolDescriptor(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    description: str = ""
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    output_schema: dict[str, Any] | None = None
+
+
+class McpCallResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str
+    is_error: bool
+    structured: dict[str, Any] | None = None
+    text: str = ""
+    duration_ms: float = 0.0
+
+
+class McpToolGateway(Protocol):
+    async def list_tools(self) -> list[ToolDescriptor]: ...
+
+    async def call_tool(
+        self, call: ToolCall, *, timeout_seconds: float | None = None
+    ) -> McpCallResult: ...

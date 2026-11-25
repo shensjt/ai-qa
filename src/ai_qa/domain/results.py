@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from ai_qa.domain.enums import ExecutionStatus, TestStatus
 from ai_qa.domain.errors import ErrorInfo
+from ai_qa.domain.models import TestRun
 
 
 class _StrictModel(BaseModel):
@@ -78,3 +79,22 @@ class ToolResult(_StrictModel):
     case_results: list[ToolCaseSummary] = Field(default_factory=list)
     artifacts: list[ArtifactRef] = Field(default_factory=list)
     error: ErrorInfo | None = None
+
+
+class ToolFailureResult(_StrictModel):
+    """工具参数/协议错误时的结构化返回；与断言失败区分。"""
+
+    tool: str
+    run_id: str | None = None
+    execution_status: ExecutionStatus = ExecutionStatus.FAILED
+    test_status: TestStatus = TestStatus.ERROR
+    error: ErrorInfo
+
+
+class RunResult(_StrictModel):
+    """get_run_result 的只读返回。"""
+
+    run: TestRun
+    case_results: list[CaseResult] = Field(default_factory=list)
+    artifacts: list[ArtifactRef] = Field(default_factory=list)
+    perf: dict[str, JsonValue] | None = None

@@ -39,19 +39,20 @@ CLI → RunOrchestrator
 - 无任意 shell、任意路径、任意 URL；外部进程使用 argv 数组、超时和 `finally` 清理。
 - 工具/环境错误映射为 ERROR，不能写成产品 FAIL；FAIL 必须带断言与证据。
 
-## 当前实现（Phase 0～1）
+## 当前实现（Phase 0～3）
 
 | 模块 | 职责 |
 |---|---|
 | `ai_qa/domain/enums.py` | TestStatus / ExecutionStatus / RunState / PlanMode / 保守聚合 |
 | `ai_qa/domain/errors.py` | 错误码、ErrorInfo、AiQaError、退出码映射 |
 | `ai_qa/domain/plans.py` | TestPlan、PlanItem、ResolvedPlanItem、StoredPlan、规范化 plan_hash |
-| `ai_qa/domain/results.py` | CaseFacts、AssertionResult、CaseResult、ToolResult |
+| `ai_qa/domain/results.py` | CaseFacts、AssertionResult、CaseResult、ToolResult、RunResult |
 | `ai_qa/domain/models.py` | TestRun、ID 生成、UTC 时间 |
 | `ai_qa/settings.py` | 配置 schema（strict）、YAML 加载、CONFIG_INVALID 映射 |
+| `ai_qa/bootstrap.py` | composition root：绝对路径解析、SQLite、Catalog、Service 装配 |
 | `ai_qa/log.py` | JSON 日志格式、敏感键脱敏 |
 | `ai_qa/doctor.py` | 只读诊断：路径、白名单进程、wrk、可写目录、密钥是否存在 |
-| `ai_qa/cli.py` | `--version`、`doctor`，统一错误输出与退出码 |
+| `ai_qa/cli.py` | `--version`、`doctor`、`run`，统一错误输出与退出码 |
 | `ai_qa/validation/catalog.py` | 6 条 HTTP case 的受信 Catalog 与完整性校验 |
 | `ai_qa/validation/params.py` | 参数类型、request-target 与攻击路径白名单 |
 | `ai_qa/validation/policy.py` | 从 Settings 推导服务端资源上限 |
@@ -66,6 +67,12 @@ CLI → RunOrchestrator
 | `ai_qa/rules/http_rules.py` | 确定性断言（状态、长度、连接复用、顺序、秘密泄露） |
 | `ai_qa/rules/evaluator.py` | CaseFacts → CaseResult，区分 ERROR 与产品 FAIL |
 | `ai_qa/application/execution_service.py` | 启动目标、逐条执行、规则判定、持久化、finally 清理 |
-| `ai_qa/application/ports.py` | Plan/Run/Result/Artifact Repository、ArtifactStore、Target/Executor/Evaluator 协议 |
+| `ai_qa/application/fixed_plan_runner.py` | 固定计划校验、持久化、真实 MCP 调用与只读回读 |
+| `ai_qa/application/ports.py` | Repository/ArtifactStore/Target/Executor/Evaluator/MCP Gateway 协议 |
+| `ai_qa/adapters/mcp_client.py` | 官方 MCP SDK stdio 客户端；initialize/list/call trace |
+| `ai_qa/adapters/trace.py` | JSONL 协议 trace |
+| `ai_qa/mcp_server/server.py` | 独立 stdio Server、工具声明与调用分发 |
+| `ai_qa/mcp_server/tools.py` | 服务端 plan_hash/目标/Policy 复验与 ExecutionService 调用 |
+| `ai_qa/mcp_server/schemas.py` | 工具输入模型与 input/output JSON Schema |
 
-MCP Server、RAG、Agent 与报告按 Phase 3～6 逐步加入；各阶段只创建需要的模块，不预先生成空文件。
+RAG、Agent、wrk 与报告按 Phase 4～6 逐步加入；各阶段只创建需要的模块，不预先生成空文件。

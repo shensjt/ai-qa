@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "goal": "验证基本 GET、HEAD、连接复用、流水线、分片解析和路径安全",
+  "target_id": "cpp-webserver-local",
+  "items": [
+    {"case_id": "http.get_index", "params": {}},
+    {"case_id": "http.head", "params": {}},
+    {"case_id": "http.keep_alive", "params": {}},
+    {"case_id": "http.pipelined", "params": {}},
+    {"case_id": "http.split_request", "params": {"split_sizes": [1, 3, 7]}},
+    {"case_id": "http.path_traversal", "params": {}}
+  ],
+  "benchmark": null,
+  "limits": {"max_cases": 6, "run_timeout_seconds": 120}
+}
