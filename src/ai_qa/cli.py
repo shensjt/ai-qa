@@ -10,6 +10,8 @@ from typing import Annotated, NoReturn
 import typer
 
 from ai_qa import __version__
+from ai_qa.agent.schemas import AgentRunOutcome
+from ai_qa.application.agent_runner import AgentRunner
 from ai_qa.application.fixed_plan_runner import FixedPlanExecution, FixedPlanRunner
 from ai_qa.bootstrap import build_app_context, build_knowledge_service
 from ai_qa.doctor import CheckStatus, DoctorReport, DoctorService
@@ -17,7 +19,7 @@ from ai_qa.domain.enums import TestStatus
 from ai_qa.domain.errors import AiQaError, ErrorCode, exit_code_for
 from ai_qa.domain.knowledge import RetrievalSnapshot
 from ai_qa.log import configure_logging
-from ai_qa.settings import load_settings, resolve_config_path
+from ai_qa.settings import load_local_env, load_settings, resolve_config_path
 from ai_qa.validation.validator import PlanValidationError
 
 app = typer.Typer(
@@ -44,6 +46,7 @@ def main(
     ] = "INFO",
 ) -> None:
     """配置日志并处理全局选项。"""
+    load_local_env()
     configure_logging(log_level)
     if version:
         typer.echo(__version__)
@@ -265,3 +268,99 @@ def _render_snapshot(snapshot: RetrievalSnapshot) -> None:
         )
         preview = " ".join(item.text.split())[:160]
         typer.echo(f"    {preview}")
+
+
+@app.command()
+def demo(
+    goal: Annotated[str, typer.Option("--goal", help="测试目标，例如：验证连接复用和路径安全")],
+    config: Annotated[Path | None, typer.Option("--config", help="配置文件路径")] = None,
+    target: Annotated[str | None, typer.Option("--target", help="目标 ID")] = None,
+    top_k: Annotated[int | None, typer.Option("--top-k", help="RAG 检索条数")] = None,
+    allow_benchmark: Annotated[
+        bool, typer.Option("--allow-benchmark", help="授权本机短压测")
+    ] = False,
+    fallback_plan: Annotated[
+        Path | None,
+        typer.Option("--fallback-plan", help="Agent 失败时使用的固定计划"),
+    ] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="以 JSON 输出")] = False,
+) -> None:
+    """RAG + DeepSeek 规划 + 真实 MCP 执行 + 总结草稿。"""
+    context = None
+    outcome: AgentRunOutcome | None = None
+    fallback: FixedPlanExecution | None = None
+    try:
+        context = build_app_context(config)
+        try:
+            outcome = asyncio.run(
+                AgentRunner(
+                    context,
+                    allow_benchmark=allow_benchmark,
+                    top_k=top_k,
+                ).execute(goal, target_id=target)
+            )
+        except AiQaError as exc:
+            if fallback_plan is None:
+                raise
+            typer.echo(
+                f"[WARN] Agent 失败（{exc.code.value}），降级固定计划: {exc.message}",
+                err=True,
+            )
+            fallback = asyncio.run(
+                FixedPlanRunner(context, allow_benchmark=allow_benchmark).execute(
+                    fallback_plan, target_id=target
+                )
+            )
+    except AiQaError as exc:
+        _emit_fatal(exc, as_json=as_json)
+    finally:
+        if context is not None:
+            context.close()
+
+    if fallback is not None:
+        if as_json:
+            typer.echo(
+                json.dumps(
+                    fallback.tool_result.model_dump(mode="json"),
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        else:
+            _render_execution(fallback)
+        raise typer.Exit(code=_verdict_exit_code(fallback.tool_result.test_status))
+
+    assert outcome is not None
+    if as_json:
+        payload = {
+            "run_id": outcome.run.run_id,
+            "plan_id": outcome.proposal.plan.plan_id,
+            "repairs": outcome.proposal.plan.repair_count,
+            "retrieval_degraded": outcome.retrieval_degraded,
+            "trace": str(outcome.trace_path),
+            "tool_result": outcome.execution.tool_result.model_dump(mode="json"),
+            "summary": outcome.execution.summary,
+            "summary_artifact": outcome.execution.summary_artifact.model_dump(mode="json"),
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        _render_agent_outcome(outcome)
+    raise typer.Exit(code=_verdict_exit_code(outcome.execution.tool_result.test_status))
+
+
+def _render_agent_outcome(outcome: AgentRunOutcome) -> None:
+    plan = outcome.proposal.plan
+    typer.echo(f"run_id: {outcome.run.run_id}")
+    typer.echo(f"plan_id: {plan.plan_id}")
+    typer.echo(f"repairs: {plan.repair_count}")
+    typer.echo(f"trace: {outcome.trace_path}")
+    if outcome.retrieval_degraded:
+        typer.echo("[WARN] RAG 检索已降级为 BM25")
+    typer.echo("")
+    for case in outcome.execution.tool_result.case_results:
+        typer.echo(f"{case.case_id:<24} {case.execution_status.value:<10} {case.test_status.value}")
+    typer.echo(f"\nverdict: {outcome.execution.tool_result.test_status.value}")
+    typer.echo(f"artifacts: {len(outcome.execution.run_result.artifacts)}")
+    typer.echo(f"summary artifact: {outcome.execution.summary_artifact.uri}")
+    typer.echo("\n--- summary draft ---")
+    typer.echo(outcome.execution.summary)

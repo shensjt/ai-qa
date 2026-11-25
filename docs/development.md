@@ -26,6 +26,17 @@ uv pip install --python .venv/bin/python \
 uv sync --locked
 ```
 
+## DeepSeek Agent 配置
+
+```bash
+cp .env.example .env
+# 编辑 .env：DEEPSEEK_API_KEY=...，必要时设置 DEEPSEEK_MODEL / DEEPSEEK_BASE_URL
+chmod 600 .env        # .env 已被 gitignore
+uv run ai-qa demo --goal "验证连接复用和路径安全" --config config/settings.yaml
+```
+
+`ai-qa` 启动时会加载仓库根目录的 `.env`（不覆盖已有环境变量）。Key 不会传给执行用 MCP Server。
+
 ## RAG 依赖与模型
 
 - `torch` 通过 `pyproject.toml` 的 `pytorch-cpu` index 锁定为 CPU wheel；不要在本地用 CUDA 版本替代，否则锁文件会不一致。
@@ -85,6 +96,7 @@ uv run ai-qa run --plan examples/plans/http_smoke.json --config config/settings.
 - MCP 契约测试（`tests/contract/test_mcp_server.py`）启动真实 `ai_qa.mcp_server` 子进程，但使用内置假目标，不需要 C++ 二进制或 API Key。
 - RAG 评估默认跑 BM25（`make eval-rag`）；真实 Qwen Embedding 评估需要 `AI_QA_RUN_REAL_EMBEDDING=1`，首次运行会下载约 1.19GB 模型，国内建议 `HF_ENDPOINT=https://hf-mirror.com`。
 - 真实 C++ 目标测试（`tests/integration/test_real_webserver.py`）默认使用 `/home/cpp/CPP/build/server/web_server`，可用 `AI_QA_CPP_SERVER` 指定其他路径；目标不存在时明确 skip，不伪装通过。
+- 真实 DeepSeek 测试标记 `agent_llm`，需要 `DEEPSEEK_API_KEY`；默认 `make check` 通过 `-m 'not agent_llm'` 排除。显式运行：`uv run pytest -m agent_llm -q -s`。Agent 模式的 Key 只从环境变量或本地 `.env` 读取，不进入 MCP Server 环境。
 - 不删除或放宽失败断言来制造通过；无法运行的命令与未验证项必须如实报告。
 
 ## 阶段状态
@@ -96,7 +108,7 @@ uv run ai-qa run --plan examples/plans/http_smoke.json --config config/settings.
 | 2 | C++ Target、6 条 HTTP 用例、Rule | 已完成 |
 | 3 | 真实 MCP Server 与固定计划 E2E | 已完成 |
 | 4 | Qwen Embedding、Chroma、BM25 | 已完成 |
-| 5 | DeepSeek Agent 与修复循环 | 未开始 |
+| 5 | DeepSeek Agent 与修复循环 | 已完成 |
 | 6 | wrk、报告与 Demo | 未开始 |
 | 7 | 故障注入、安全、发布候选 | 未开始 |
 
@@ -140,6 +152,7 @@ src/ai_qa/
 │  └─ evaluator.py   # CaseFacts → CaseResult（唯一 verdict 来源）
 ├─ adapters/
 │  ├─ mcp_client.py  # 官方 SDK stdio 客户端（initialize/list/call）
+│  ├─ deepseek_chat.py   # ChatDeepSeek：JSON 规划与工具决策
 │  ├─ qwen_embeddings.py # Qwen3-Embedding-0.6B（sentence-transformers）
 │  ├─ chroma_store.py    # Chroma cosine collection 与 metadata 校验
 │  └─ trace.py       # JSONL 协议 trace
@@ -148,6 +161,11 @@ src/ai_qa/
 │  ├─ ingest.py      # manifest、hash、增量重建、陈旧清理
 │  ├─ bm25.py        # 中文单字+双字 BM25 降级
 │  └─ eval.py        # Recall@5 / MRR / 引用合法率
+├─ agent/
+│  ├─ prompts.py    # 规划/修复/工具/总结提示词
+│  ├─ planner.py    # 计划生成与最多 2 次修复
+│  ├─ tool_agent.py # 受约束工具循环（零参数工具、ID 注入、调用上限）
+│  └─ schemas.py    # PlanProposal / AgentExecution
 ├─ mcp_server/
 │  ├─ __main__.py    # python -m ai_qa.mcp_server
 │  ├─ server.py      # 工具声明、调用分发、stdio 入口
@@ -156,7 +174,9 @@ src/ai_qa/
 └─ application/
    ├─ ports.py       # Repository / ArtifactStore / Target / Executor / Evaluator / Gateway 协议
    ├─ execution_service.py  # 启停目标 + 逐条执行 + 持久化
-   └─ fixed_plan_runner.py  # 固定计划 E2E 编排（CLI）
+   ├─ fixed_plan_runner.py  # 固定计划 E2E 编排（CLI）
+   ├─ mcp_payloads.py       # structuredContent 契约校验
+   └─ agent_runner.py       # RAG → 计划/修复 → MCP → 总结
 ```
 
 依赖方向：`cli/validation/persistence/artifacts/execution/rules/adapters/mcp_server` → `application.ports`/`domain`。`domain` 不导入任何第三方框架；Repository 不跨线程共享 Session；MCP Server 只读绝对路径环境变量，不依赖父进程内存。

@@ -104,6 +104,20 @@ class LoadedSettings:
     config_path: Path
 
 
+def load_local_env(path: Path | None = None) -> None:
+    """本地开发便利：加载 .env 到环境变量，但不覆盖已存在的变量。"""
+    from dotenv import load_dotenv
+
+    candidate = path or Path(".env")
+    if candidate.is_file():
+        load_dotenv(candidate, override=False)
+    # huggingface_hub 不解析相对 HF_HOME；统一按仓库根目录转成绝对路径。
+    for key in ("HF_HOME", "HF_HUB_CACHE", "TRANSFORMERS_CACHE"):
+        raw = os.environ.get(key)
+        if raw and not Path(raw).expanduser().is_absolute():
+            os.environ[key] = str((Path.cwd() / raw).expanduser().resolve())
+
+
 def resolve_config_path(explicit: Path | None = None) -> Path:
     """CLI 显式指定 > AI_QA_CONFIG > config/settings.yaml。"""
     if explicit is not None:

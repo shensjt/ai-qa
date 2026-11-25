@@ -8,16 +8,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pydantic import ValidationError
-
 from ai_qa.adapters.mcp_client import McpServerLaunchConfig, McpStdioGateway
+from ai_qa.application.mcp_payloads import parse_run_result, parse_tool_result
 from ai_qa.application.ports import ToolCall
 from ai_qa.bootstrap import AppContext
 from ai_qa.domain.enums import PlanMode, RunState
 from ai_qa.domain.errors import AiQaError, ErrorCode
 from ai_qa.domain.models import TestRun, new_test_run, utc_now
 from ai_qa.domain.plans import StoredPlan
-from ai_qa.domain.results import RunResult, ToolFailureResult, ToolResult
+from ai_qa.domain.results import RunResult, ToolResult
 from ai_qa.validation.policy import policy_from_settings
 from ai_qa.validation.validator import (
     PlanValidationError,
@@ -96,13 +95,13 @@ class FixedPlanRunner:
                 ),
                 timeout_seconds=float(plan.limits.run_timeout_seconds) + 60.0,
             )
-            tool_result = _parse_tool_result(response.structured, response.is_error)
+            tool_result = parse_tool_result(response.structured, response.is_error)
 
             readback = await gateway.call_tool(
                 ToolCall(name="get_run_result", arguments={"run_id": run.run_id}),
                 timeout_seconds=60.0,
             )
-            run_result = _parse_run_result(readback.structured, readback.is_error)
+            run_result = parse_run_result(readback.structured, readback.is_error)
 
         return FixedPlanExecution(
             run=run,
@@ -144,45 +143,3 @@ class FixedPlanRunner:
         if result.plan is None:
             raise PlanValidationError(result.issues)
         return result.plan
-
-
-def _parse_tool_result(structured: dict[str, Any] | None, is_error: bool) -> ToolResult:
-    if structured is None:
-        raise AiQaError(ErrorCode.MCP_PROTOCOL_ERROR, "MCP 返回缺少 structuredContent")
-    try:
-        if is_error:
-            failure = ToolFailureResult.model_validate(structured)
-            raise AiQaError(
-                failure.error.code,
-                failure.error.message,
-                retryable=failure.error.retryable,
-                details=failure.error.details,
-            )
-        return ToolResult.model_validate(structured)
-    except ValidationError as exc:
-        raise AiQaError(
-            ErrorCode.MCP_PROTOCOL_ERROR,
-            "structuredContent 不符合 ToolResult 契约",
-            details={"error": str(exc)[:300]},
-        ) from exc
-
-
-def _parse_run_result(structured: dict[str, Any] | None, is_error: bool) -> RunResult:
-    if structured is None:
-        raise AiQaError(ErrorCode.MCP_PROTOCOL_ERROR, "get_run_result 缺少 structuredContent")
-    try:
-        if is_error:
-            failure = ToolFailureResult.model_validate(structured)
-            raise AiQaError(
-                failure.error.code,
-                failure.error.message,
-                retryable=failure.error.retryable,
-                details=failure.error.details,
-            )
-        return RunResult.model_validate(structured)
-    except ValidationError as exc:
-        raise AiQaError(
-            ErrorCode.MCP_PROTOCOL_ERROR,
-            "get_run_result 返回不符合 RunResult 契约",
-            details={"error": str(exc)[:300]},
-        ) from exc

@@ -39,7 +39,7 @@ CLI → RunOrchestrator
 - 无任意 shell、任意路径、任意 URL；外部进程使用 argv 数组、超时和 `finally` 清理。
 - 工具/环境错误映射为 ERROR，不能写成产品 FAIL；FAIL 必须带断言与证据。
 
-## 当前实现（Phase 0～4）
+## 当前实现（Phase 0～5）
 
 | 模块 | 职责 |
 |---|---|
@@ -81,5 +81,11 @@ CLI → RunOrchestrator
 | `ai_qa/adapters/qwen_embeddings.py` | Qwen3-Embedding-0.6B、query 指令、模型元数据 |
 | `ai_qa/adapters/chroma_store.py` | Chroma cosine collection、metadata 不一致拒绝复用 |
 | `ai_qa/application/knowledge_service.py` | 知识构建、向量检索、BM25 降级、RetrievalSnapshot/ref_id |
+| `ai_qa/adapters/deepseek_chat.py` | ChatDeepSeek：JSON 规划/修复与工具决策 |
+| `ai_qa/agent/planner.py` | AGENT_PLAN 生成、四层校验、最多 2 次修复 |
+| `ai_qa/agent/tool_agent.py` | 零参数工具、ID 注入、调用上限、总结不能改 verdict |
+| `ai_qa/agent/prompts.py` | 规划/修复/工具/总结提示词与上下文预算 |
+| `ai_qa/application/agent_runner.py` | RAG → 计划 → 校验 → MCP → 总结的端到端编排 |
+| `ai_qa/application/mcp_payloads.py` | structuredContent 客户端契约校验 |
 
-Agent、wrk 与报告按 Phase 5～6 逐步加入；各阶段只创建需要的模块，不预先生成空文件。
+wrk 与报告按 Phase 6 逐步加入；各阶段只创建需要的模块，不预先生成空文件。

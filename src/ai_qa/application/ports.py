@@ -116,6 +116,7 @@ class ToolCall(BaseModel):
 
     name: str
     arguments: dict[str, JsonValue] = Field(default_factory=dict)
+    call_id: str | None = None
 
 
 class ToolDescriptor(BaseModel):
@@ -185,3 +186,36 @@ class VectorStore(Protocol):
     ) -> list[tuple[str, float]]: ...
 
     def reset(self) -> None: ...
+
+
+class ToolExchange(BaseModel):
+    """一次模型工具调用及其观察结果，用于下一轮工具决策。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    call_id: str
+    tool: str
+    arguments: dict[str, JsonValue] = Field(default_factory=dict)
+    result_text: str
+
+
+class ToolDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    calls: list[ToolCall] = Field(default_factory=list)
+    text: str = ""
+
+
+class ChatPlanner(Protocol):
+    async def complete(self, *, system: str, user: str) -> str: ...
+
+
+class ToolCallingChat(Protocol):
+    async def decide(
+        self,
+        *,
+        system: str,
+        user: str,
+        tools: list[ToolDescriptor],
+        history: list[ToolExchange],
+    ) -> ToolDecision: ...
