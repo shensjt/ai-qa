@@ -176,3 +176,29 @@ class KnowledgeChunkRow(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class PerfResultRow(Base):
+    __tablename__ = "perf_result"
+
+    perf_result_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("test_run.run_id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    tool: Mapped[str] = mapped_column(String(16), nullable=False)
+    tool_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    command_json: Mapped[str] = mapped_column(Text, nullable=False)
+    target_url: Mapped[str] = mapped_column(Text, nullable=False)
+    config_json: Mapped[str] = mapped_column(Text, nullable=False)
+    metrics_json: Mapped[str] = mapped_column(Text, nullable=False)
+    environment_json: Mapped[str] = mapped_column(Text, nullable=False)
+    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stdout_artifact_json: Mapped[str] = mapped_column(Text, nullable=False)
+    stderr_artifact_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metrics_artifact_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    test_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    notes_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(String(40), nullable=False)

@@ -30,6 +30,18 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TARGET_ID = "cpp-webserver-local"
 SECRET_MARKER = "TOP-SECRET-MARKER-12345"
 
+FAKE_WRK = """#!/bin/sh
+if [ "$1" = "--version" ]; then echo "wrk 4.2.0"; exit 0; fi
+cat <<'OUT'
+Running 5s test @ http://127.0.0.1/
+  2 threads and 10 connections
+  12345 requests in 5.00s, 10.00MB read
+Requests/sec:   2469.00
+Transfer/sec:      2.00MB
+Socket errors: connect 0, read 0, write 0, timeout 0
+OUT
+"""
+
 FAKE_TARGET = """#!/usr/bin/env python3
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -99,6 +111,9 @@ def mcp_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     executable = target_root / "fake_server"
     executable.write_text(FAKE_TARGET, encoding="utf-8")
     executable.chmod(0o755)
+    fake_wrk = target_root / "wrk"
+    fake_wrk.write_text(FAKE_WRK, encoding="utf-8")
+    fake_wrk.chmod(0o755)
 
     port = _free_port()
     data: dict[str, Any] = yaml.safe_load(
@@ -110,7 +125,8 @@ def mcp_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     data["target"]["working_directory"] = str(target_root)
     data["target"]["www_root"] = str(www)
     data["target"]["port"] = port
-    data["runtime"]["allowed_processes"] = [str(executable)]
+    data["runtime"]["allowed_processes"] = [str(executable), str(fake_wrk)]
+    data["benchmark"]["wrk_path"] = str(fake_wrk)
     config_path = tmp_path / "settings.yaml"
     config_path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
 
@@ -266,18 +282,42 @@ def test_fixed_plan_runs_through_real_mcp(mcp_env: McpTestEnv) -> None:
     assert events.count("tool_call_finished") == 2
 
 
-def test_benchmark_is_explicitly_unimplemented(mcp_env: McpTestEnv) -> None:
-    response = _call_single(
-        mcp_env,
-        ToolCall(name="run_http_benchmark", arguments=_call_arguments(mcp_env)),
-    )
+def test_benchmark_smoke(mcp_env: McpTestEnv) -> None:
+    async def flow() -> tuple[McpCallResult, McpCallResult, McpCallResult]:
+        async with _gateway(mcp_env) as gateway:
+            cases = await gateway.call_tool(
+                ToolCall(name="run_http_cases", arguments=_call_arguments(mcp_env)),
+                timeout_seconds=60,
+            )
+            bench = await gateway.call_tool(
+                ToolCall(
+                    name="run_http_benchmark",
+                    arguments=_call_arguments(mcp_env),
+                ),
+                timeout_seconds=60,
+            )
+            readback = await gateway.call_tool(
+                ToolCall(name="get_run_result", arguments={"run_id": mcp_env.run_id}),
+                timeout_seconds=30,
+            )
+        return cases, bench, readback
 
-    assert response.is_error is True
-    assert response.structured is not None
-    failure = ToolFailureResult.model_validate(response.structured)
-    assert failure.error.code is ErrorCode.MCP_TOOL_ERROR
-    assert "Phase 6" in failure.error.message
-    assert not (mcp_env.context.paths.artifacts / "_target-logs" / "target.stdout.log").exists()
+    cases, bench, readback = asyncio.run(flow())
+
+    assert cases.is_error is False
+    assert bench.is_error is False
+    assert bench.structured is not None
+    tool_result = ToolResult.model_validate(bench.structured)
+    assert tool_result.tool == "run_http_benchmark"
+    assert tool_result.execution_status.value == "SUCCEEDED"
+    assert tool_result.test_status is Status.INCONCLUSIVE
+    assert any(artifact.name.endswith("wrk.txt") for artifact in tool_result.artifacts)
+
+    assert readback.is_error is False and readback.structured is not None
+    run_result = RunResult.model_validate(readback.structured)
+    assert run_result.perf is not None
+    assert run_result.perf.tool == "wrk"
+    assert run_result.perf.metrics["requests_per_sec"] == 2469.0
 
 
 def test_plan_hash_mismatch_rejected(mcp_env: McpTestEnv) -> None:

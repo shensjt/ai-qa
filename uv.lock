@@ -21,6 +21,7 @@ name = "ai-qa-agent"
 source = { editable = "." }
 dependencies = [
     { name = "chromadb" },
+    { name = "jinja2" },
     { name = "langchain-deepseek" },
     { name = "mcp" },
     { name = "pydantic" },
@@ -47,6 +48,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "chromadb", specifier = "==1.5.9" },
+    { name = "jinja2", specifier = ">=3.1" },
     { name = "langchain-deepseek", specifier = "==1.2.1" },
     { name = "mcp", specifier = "==2.3.0" },
     { name = "pydantic", specifier = ">=2.7" },

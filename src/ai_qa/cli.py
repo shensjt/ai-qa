@@ -19,6 +19,7 @@ from ai_qa.domain.enums import TestStatus
 from ai_qa.domain.errors import AiQaError, ErrorCode, exit_code_for
 from ai_qa.domain.knowledge import RetrievalSnapshot
 from ai_qa.log import configure_logging
+from ai_qa.report.markdown import ReportArtifacts, ReportService
 from ai_qa.settings import load_local_env, load_settings, resolve_config_path
 from ai_qa.validation.validator import PlanValidationError
 
@@ -99,12 +100,14 @@ def run(
     except AiQaError as exc:
         _emit_fatal(exc, as_json=as_json)
 
+    report: ReportArtifacts | None = None
     try:
         execution = asyncio.run(
             FixedPlanRunner(context, allow_benchmark=allow_benchmark).execute(
                 plan, target_id=target
             )
         )
+        report = ReportService(context).generate(execution.run.run_id)
     except PlanValidationError as exc:
         _emit_validation_error(exc, as_json=as_json)
     except AiQaError as exc:
@@ -112,16 +115,20 @@ def run(
     finally:
         context.close()
 
+    assert report is not None
     if as_json:
         typer.echo(
             json.dumps(
-                execution.tool_result.model_dump(mode="json"),
+                {
+                    "tool_result": execution.tool_result.model_dump(mode="json"),
+                    "report": report.report.model_dump(mode="json"),
+                },
                 ensure_ascii=False,
                 indent=2,
             )
         )
     else:
-        _render_execution(execution)
+        _render_execution(execution, report)
     raise typer.Exit(code=_verdict_exit_code(execution.tool_result.test_status))
 
 
@@ -159,16 +166,30 @@ def _emit_validation_error(exc: PlanValidationError, *, as_json: bool) -> NoRetu
     raise typer.Exit(code=exit_code_for(exc.code))
 
 
-def _render_execution(execution: FixedPlanExecution) -> None:
+def _render_execution(execution: FixedPlanExecution, report: ReportArtifacts | None = None) -> None:
     typer.echo(f"run_id: {execution.run.run_id}")
     typer.echo(f"plan_id: {execution.run.plan_id}")
     typer.echo(f"trace: {execution.trace_path}")
     typer.echo("")
     for case in execution.tool_result.case_results:
         typer.echo(f"{case.case_id:<24} {case.execution_status.value:<10} {case.test_status.value}")
+    if execution.benchmark_error is not None:
+        typer.echo(
+            f"[WARN] benchmark ERROR: {execution.benchmark_error.code.value} "
+            f"{execution.benchmark_error.message}"
+        )
+    perf = execution.run_result.perf
+    if perf is not None:
+        typer.echo(
+            f"benchmark: {perf.tool} {perf.tool_version} "
+            f"status={perf.test_status.value} "
+            f"requests/sec={perf.metrics.get('requests_per_sec', 'n/a')}"
+        )
     typer.echo(f"\nverdict: {execution.tool_result.test_status.value}")
     typer.echo(f"artifacts: {len(execution.run_result.artifacts)}")
     typer.echo(f"case_results: {len(execution.run_result.case_results)}")
+    if report is not None:
+        typer.echo(f"report: {report.report.uri}")
 
 
 def _verdict_exit_code(status: TestStatus) -> int:
@@ -289,6 +310,7 @@ def demo(
     context = None
     outcome: AgentRunOutcome | None = None
     fallback: FixedPlanExecution | None = None
+    report: ReportArtifacts | None = None
     try:
         context = build_app_context(config)
         try:
@@ -299,6 +321,7 @@ def demo(
                     top_k=top_k,
                 ).execute(goal, target_id=target)
             )
+            report = ReportService(context).generate(outcome.run.run_id)
         except AiQaError as exc:
             if fallback_plan is None:
                 raise
@@ -311,6 +334,7 @@ def demo(
                     fallback_plan, target_id=target
                 )
             )
+            report = ReportService(context).generate(fallback.run.run_id)
     except AiQaError as exc:
         _emit_fatal(exc, as_json=as_json)
     finally:
@@ -318,19 +342,23 @@ def demo(
             context.close()
 
     if fallback is not None:
+        assert report is not None
         if as_json:
             typer.echo(
                 json.dumps(
-                    fallback.tool_result.model_dump(mode="json"),
+                    {
+                        "tool_result": fallback.tool_result.model_dump(mode="json"),
+                        "report": report.report.model_dump(mode="json"),
+                    },
                     ensure_ascii=False,
                     indent=2,
                 )
             )
         else:
-            _render_execution(fallback)
+            _render_execution(fallback, report)
         raise typer.Exit(code=_verdict_exit_code(fallback.tool_result.test_status))
 
-    assert outcome is not None
+    assert outcome is not None and report is not None
     if as_json:
         payload = {
             "run_id": outcome.run.run_id,
@@ -341,14 +369,15 @@ def demo(
             "tool_result": outcome.execution.tool_result.model_dump(mode="json"),
             "summary": outcome.execution.summary,
             "summary_artifact": outcome.execution.summary_artifact.model_dump(mode="json"),
+            "report": report.report.model_dump(mode="json"),
         }
         typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
-        _render_agent_outcome(outcome)
+        _render_agent_outcome(outcome, report)
     raise typer.Exit(code=_verdict_exit_code(outcome.execution.tool_result.test_status))
 
 
-def _render_agent_outcome(outcome: AgentRunOutcome) -> None:
+def _render_agent_outcome(outcome: AgentRunOutcome, report: ReportArtifacts | None = None) -> None:
     plan = outcome.proposal.plan
     typer.echo(f"run_id: {outcome.run.run_id}")
     typer.echo(f"plan_id: {plan.plan_id}")
@@ -362,5 +391,57 @@ def _render_agent_outcome(outcome: AgentRunOutcome) -> None:
     typer.echo(f"\nverdict: {outcome.execution.tool_result.test_status.value}")
     typer.echo(f"artifacts: {len(outcome.execution.run_result.artifacts)}")
     typer.echo(f"summary artifact: {outcome.execution.summary_artifact.uri}")
+    if report is not None:
+        typer.echo(f"report: {report.report.uri}")
     typer.echo("\n--- summary draft ---")
     typer.echo(outcome.execution.summary)
+
+
+@app.command()
+def show(
+    run_id: Annotated[str, typer.Argument(help="Run ID")],
+    config: Annotated[Path | None, typer.Option("--config", help="配置文件路径")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="以 JSON 输出")] = False,
+) -> None:
+    """读取已持久化结果并生成/打印报告；不触发重新执行。"""
+    context = None
+    try:
+        context = build_app_context(config)
+        try:
+            context.run_repository.get_run(run_id)
+        except AiQaError as exc:
+            raise AiQaError(
+                ErrorCode.CONFIG_INVALID,
+                f"run 不存在: {run_id}",
+                details={"run_id": run_id},
+            ) from exc
+        report = ReportService(context).generate(run_id)
+    except AiQaError as exc:
+        _emit_fatal(exc, as_json=as_json)
+    finally:
+        if context is not None:
+            context.close()
+
+    payload = report.payload
+    if as_json:
+        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+
+    run = payload["run"]
+    typer.echo(f"run_id: {run['run_id']}")
+    typer.echo(f"plan_id: {run['plan_id']}")
+    typer.echo(f"state: {run['state']}")
+    typer.echo(f"verdict: {payload['overall_verdict']}")
+    typer.echo(f"execution: {payload['overall_execution']}")
+    for case in payload["case_results"]:
+        typer.echo(f"{case['case_id']:<24} {case['execution_status']:<10} {case['test_status']}")
+    perf = payload["perf"]
+    if perf is not None:
+        typer.echo(
+            f"benchmark: {perf['tool']} {perf['tool_version']} "
+            f"status={perf['test_status']} "
+            f"requests/sec={perf['metrics'].get('requests_per_sec', 'n/a')}"
+        )
+    typer.echo(f"artifacts: {len(payload['artifacts'])}")
+    typer.echo(f"report: {report.report.uri}")
+    typer.echo(f"results.json: {report.results.uri}")

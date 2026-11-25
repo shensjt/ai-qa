@@ -7,6 +7,7 @@ import logging
 from collections.abc import Iterable
 from typing import Any
 
+from ai_qa.application.perf_service import BenchmarkService
 from ai_qa.bootstrap import AppContext, build_execution_service, detect_secret_marker
 from ai_qa.domain.enums import (
     ExecutionStatus,
@@ -74,18 +75,48 @@ class QaMcpTools:
 
     async def run_http_benchmark(self, args: RunCasesArgs) -> tuple[dict[str, Any], bool]:
         try:
-            run, plan = self._load_verified_plan(args)
+            run, plan = self._load_verified_plan(
+                args,
+                allowed_states={
+                    RunState.VALIDATED,
+                    RunState.RUNNING,
+                    RunState.COMPLETED,
+                },
+            )
             if plan.benchmark is None or not plan.benchmark.enabled:
                 raise AiQaError(
                     ErrorCode.POLICY_VIOLATION,
                     "计划未包含已授权的 benchmark",
                     details={"run_id": run.run_id},
                 )
-            raise AiQaError(
-                ErrorCode.MCP_TOOL_ERROR,
-                "run_http_benchmark 尚未实现（Phase 6）",
-                details={"run_id": run.run_id},
+            if self._context.perf_repository.get_perf_result(run.run_id) is not None:
+                raise AiQaError(
+                    ErrorCode.MCP_TOOL_ERROR,
+                    "该 run 已存在 benchmark 结果",
+                    details={"run_id": run.run_id},
+                )
+            perf = await asyncio.to_thread(BenchmarkService(self._context).run, run, plan)
+            artifacts = [
+                artifact
+                for artifact in (
+                    perf.raw_stdout,
+                    perf.raw_stderr,
+                    perf.metrics_artifact,
+                )
+                if artifact is not None
+            ]
+            tool_result = ToolResult(
+                call_id=new_id("call"),
+                run_id=run.run_id,
+                tool="run_http_benchmark",
+                execution_status=ExecutionStatus.SUCCEEDED,
+                test_status=perf.test_status,
+                facts={"perf": perf.model_dump(mode="json")},
+                case_results=[],
+                artifacts=artifacts,
+                error=None,
             )
+            return tool_result.model_dump(mode="json"), False
         except AiQaError as exc:
             return self._failure("run_http_benchmark", exc, run_id=args.run_id), True
 
@@ -99,13 +130,18 @@ class QaMcpTools:
             run=run,
             case_results=self._context.result_repository.list_case_results(run.run_id),
             artifacts=self._context.artifact_repository.list_artifacts(run.run_id),
-            perf=None,
+            perf=self._context.perf_repository.get_perf_result(run.run_id),
         )
         return payload.model_dump(mode="json"), False
 
     # ------------------------------------------------------------- helpers
 
-    def _load_verified_plan(self, args: RunCasesArgs) -> tuple[TestRun, StoredPlan]:
+    def _load_verified_plan(
+        self,
+        args: RunCasesArgs,
+        *,
+        allowed_states: set[RunState] | None = None,
+    ) -> tuple[TestRun, StoredPlan]:
         try:
             run = self._context.run_repository.get_run(args.run_id)
             plan = self._context.plan_repository.get_plan(args.plan_id)
@@ -124,7 +160,8 @@ class QaMcpTools:
                 f"计划状态不是 VALIDATED: {plan.status}",
                 details={"plan_id": plan.plan_id},
             )
-        if run.state is not RunState.VALIDATED:
+        allowed = allowed_states or {RunState.VALIDATED}
+        if run.state not in allowed:
             raise AiQaError(
                 ErrorCode.MCP_TOOL_ERROR,
                 f"run 状态不允许执行: {run.state}",

@@ -86,6 +86,8 @@ make doctor       # 对示例配置运行 doctor（预期报错，见 README）
 
 ```bash
 uv run ai-qa run --plan examples/plans/http_smoke.json --config config/settings.yaml
+uv run ai-qa run --plan examples/plans/http_benchmark.json --config config/settings.yaml --allow-benchmark
+uv run ai-qa show <run_id> --config config/settings.yaml
 ```
 
 ## 测试约定
@@ -109,7 +111,7 @@ uv run ai-qa run --plan examples/plans/http_smoke.json --config config/settings.
 | 3 | 真实 MCP Server 与固定计划 E2E | 已完成 |
 | 4 | Qwen Embedding、Chroma、BM25 | 已完成 |
 | 5 | DeepSeek Agent 与修复循环 | 已完成 |
-| 6 | wrk、报告与 Demo | 未开始 |
+| 6 | wrk、报告与 Demo | 已完成 |
 | 7 | 故障注入、安全、发布候选 | 未开始 |
 
 ## 代码结构（当前）
@@ -146,6 +148,7 @@ src/ai_qa/
 │  ├─ http_protocol.py  # 原始 HTTP/1.1 客户端与响应解析
 │  ├─ http_executor.py  # 6 条用例的事实采集
 │  ├─ target_manager.py # 目标进程生命周期
+│  ├─ wrk_executor.py   # wrk 短压测、argv 白名单、指标解析
 │  └─ registry.py       # Executor 注册表
 ├─ rules/
 │  ├─ http_rules.py  # 确定性断言
@@ -171,6 +174,9 @@ src/ai_qa/
 │  ├─ server.py      # 工具声明、调用分发、stdio 入口
 │  ├─ tools.py       # 服务端复验 + ExecutionService
 │  └─ schemas.py     # 工具输入/输出 JSON Schema
+├─ report/
+│  ├─ markdown.py   # 报告生成与 results.json
+│  └─ templates/report.md.j2
 └─ application/
    ├─ ports.py       # Repository / ArtifactStore / Target / Executor / Evaluator / Gateway 协议
    ├─ execution_service.py  # 启停目标 + 逐条执行 + 持久化

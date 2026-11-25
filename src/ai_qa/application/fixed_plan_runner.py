@@ -13,7 +13,7 @@ from ai_qa.application.mcp_payloads import parse_run_result, parse_tool_result
 from ai_qa.application.ports import ToolCall
 from ai_qa.bootstrap import AppContext
 from ai_qa.domain.enums import PlanMode, RunState
-from ai_qa.domain.errors import AiQaError, ErrorCode
+from ai_qa.domain.errors import AiQaError, ErrorCode, ErrorInfo
 from ai_qa.domain.models import TestRun, new_test_run, utc_now
 from ai_qa.domain.plans import StoredPlan
 from ai_qa.domain.results import RunResult, ToolResult
@@ -31,6 +31,7 @@ class FixedPlanExecution:
     tool_result: ToolResult
     run_result: RunResult
     trace_path: Path
+    benchmark_error: ErrorInfo | None = None
 
 
 class FixedPlanRunner:
@@ -97,6 +98,24 @@ class FixedPlanRunner:
             )
             tool_result = parse_tool_result(response.structured, response.is_error)
 
+            benchmark_error: ErrorInfo | None = None
+            if plan.benchmark is not None:
+                try:
+                    bench = await gateway.call_tool(
+                        ToolCall(
+                            name="run_http_benchmark",
+                            arguments={
+                                "run_id": run.run_id,
+                                "plan_id": plan.plan_id,
+                                "plan_hash": plan.plan_hash,
+                            },
+                        ),
+                        timeout_seconds=float(benchmark_duration(plan)) + 120.0,
+                    )
+                    parse_tool_result(bench.structured, bench.is_error)
+                except AiQaError as exc:
+                    benchmark_error = exc.to_error_info()
+
             readback = await gateway.call_tool(
                 ToolCall(name="get_run_result", arguments={"run_id": run.run_id}),
                 timeout_seconds=60.0,
@@ -108,6 +127,7 @@ class FixedPlanRunner:
             tool_result=tool_result,
             run_result=run_result,
             trace_path=trace_path,
+            benchmark_error=benchmark_error,
         )
 
     def _validate_plan(self, path: Path) -> StoredPlan:
@@ -143,3 +163,9 @@ class FixedPlanRunner:
         if result.plan is None:
             raise PlanValidationError(result.issues)
         return result.plan
+
+
+def benchmark_duration(plan: StoredPlan) -> int:
+    if plan.benchmark is None:
+        return 0
+    return plan.benchmark.duration_seconds

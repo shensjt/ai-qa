@@ -39,7 +39,7 @@ CLI → RunOrchestrator
 - 无任意 shell、任意路径、任意 URL；外部进程使用 argv 数组、超时和 `finally` 清理。
 - 工具/环境错误映射为 ERROR，不能写成产品 FAIL；FAIL 必须带断言与证据。
 
-## 当前实现（Phase 0～5）
+## 当前实现（Phase 0～6）
 
 | 模块 | 职责 |
 |---|---|
@@ -87,5 +87,9 @@ CLI → RunOrchestrator
 | `ai_qa/agent/prompts.py` | 规划/修复/工具/总结提示词与上下文预算 |
 | `ai_qa/application/agent_runner.py` | RAG → 计划 → 校验 → MCP → 总结的端到端编排 |
 | `ai_qa/application/mcp_payloads.py` | structuredContent 客户端契约校验 |
+| `ai_qa/execution/wrk_executor.py` | wrk argv 白名单、资源上限、超时、原始输出与指标解析 |
+| `ai_qa/application/perf_service.py` | 启动目标 → wrk smoke → PerfResult 持久化 |
+| `ai_qa/report/markdown.py` + `templates/` | Jinja2 Markdown 报告与 results.json |
+| `ai_qa/cli.py` | run/demo 自动生成报告；show 只读查看 |
 
-wrk 与报告按 Phase 6 逐步加入；各阶段只创建需要的模块，不预先生成空文件。
+Phase 7 的故障注入、安全加固与发布候选尚未开始；各阶段只创建需要的模块。

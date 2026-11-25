@@ -33,12 +33,19 @@ from ai_qa.domain.plans import (
     StoredPlan,
     TestPlan,
 )
-from ai_qa.domain.results import ArtifactRef, AssertionResult, CaseFacts, CaseResult
+from ai_qa.domain.results import (
+    ArtifactRef,
+    AssertionResult,
+    CaseFacts,
+    CaseResult,
+    PerfResult,
+)
 from ai_qa.persistence.tables import (
     ArtifactRow,
     AssertionResultRow,
     KnowledgeChunkRow,
     KnowledgeDocumentRow,
+    PerfResultRow,
     PlanItemRow,
     RunCaseResultRow,
     TestPlanRow,
@@ -530,3 +537,77 @@ class SqlKnowledgeRepository:
                 .all()
             )
             return [_to_knowledge_chunk(row) for row in rows]
+
+
+class SqlPerfResultRepository:
+    def __init__(self, session_factory: sessionmaker[Session]) -> None:
+        self._session_factory = session_factory
+
+    def save_perf_result(self, perf: PerfResult) -> None:
+        row = PerfResultRow(
+            perf_result_id=perf.perf_result_id,
+            run_id=perf.run_id,
+            tool=perf.tool,
+            tool_version=perf.tool_version,
+            command_json=_dump_json(perf.command),
+            target_url=perf.target_url,
+            config_json=_dump_json(perf.config),
+            metrics_json=_dump_json(perf.metrics),
+            environment_json=_dump_json(perf.environment),
+            exit_code=perf.exit_code,
+            stdout_artifact_json=_dump_json(perf.raw_stdout.model_dump(mode="json")),
+            stderr_artifact_json=(
+                _dump_json(perf.raw_stderr.model_dump(mode="json"))
+                if perf.raw_stderr is not None
+                else None
+            ),
+            metrics_artifact_json=(
+                _dump_json(perf.metrics_artifact.model_dump(mode="json"))
+                if perf.metrics_artifact is not None
+                else None
+            ),
+            test_status=perf.test_status.value,
+            notes_json=_dump_json(perf.notes),
+            created_at=_iso(perf.created_at),
+        )
+        with self._session_factory() as session:
+            existing = session.get(PerfResultRow, perf.perf_result_id)
+            if existing is None:
+                session.add(row)
+            else:
+                session.merge(row)
+            session.commit()
+
+    def get_perf_result(self, run_id: str) -> PerfResult | None:
+        with self._session_factory() as session:
+            row = session.execute(
+                select(PerfResultRow).where(PerfResultRow.run_id == run_id)
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            return PerfResult(
+                perf_result_id=row.perf_result_id,
+                run_id=row.run_id,
+                tool=row.tool,
+                tool_version=row.tool_version,
+                command=_load_json(row.command_json),
+                target_url=row.target_url,
+                config=_load_json(row.config_json),
+                metrics=_load_json(row.metrics_json),
+                environment=_load_json(row.environment_json),
+                exit_code=row.exit_code,
+                raw_stdout=ArtifactRef.model_validate(_load_json(row.stdout_artifact_json)),
+                raw_stderr=(
+                    ArtifactRef.model_validate(_load_json(row.stderr_artifact_json))
+                    if row.stderr_artifact_json is not None
+                    else None
+                ),
+                metrics_artifact=(
+                    ArtifactRef.model_validate(_load_json(row.metrics_artifact_json))
+                    if row.metrics_artifact_json is not None
+                    else None
+                ),
+                test_status=TestStatus(row.test_status),
+                notes=list(_load_json(row.notes_json)),
+                created_at=_to_dt(row.created_at),
+            )

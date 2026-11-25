@@ -28,6 +28,7 @@ from ai_qa.persistence.migrations import initialize_schema
 from ai_qa.persistence.repositories import (
     SqlArtifactRepository,
     SqlKnowledgeRepository,
+    SqlPerfResultRepository,
     SqlPlanRepository,
     SqlResultRepository,
     SqlRunRepository,
@@ -82,6 +83,7 @@ class AppContext:
     run_repository: SqlRunRepository
     result_repository: SqlResultRepository
     artifact_repository: SqlArtifactRepository
+    perf_repository: SqlPerfResultRepository
     knowledge_repository: SqlKnowledgeRepository
     artifact_store: FileArtifactStore
     catalog: CaseCatalog
@@ -126,6 +128,7 @@ def build_app_context(config_path: Path | None = None) -> AppContext:
         run_repository=SqlRunRepository(session_factory),
         result_repository=SqlResultRepository(session_factory),
         artifact_repository=SqlArtifactRepository(session_factory),
+        perf_repository=SqlPerfResultRepository(session_factory),
         knowledge_repository=SqlKnowledgeRepository(session_factory),
         artifact_store=artifact_store,
         catalog=catalog,

@@ -91,10 +91,29 @@ class ToolFailureResult(_StrictModel):
     error: ErrorInfo
 
 
+class PerfResult(_StrictModel):
+    perf_result_id: str
+    run_id: str
+    tool: Literal["wrk"]
+    tool_version: str
+    command: list[str] = Field(default_factory=list)
+    target_url: str
+    config: dict[str, JsonValue] = Field(default_factory=dict)
+    metrics: dict[str, JsonValue] = Field(default_factory=dict)
+    environment: dict[str, JsonValue] = Field(default_factory=dict)
+    exit_code: int | None = None
+    raw_stdout: ArtifactRef
+    raw_stderr: ArtifactRef | None = None
+    metrics_artifact: ArtifactRef | None = None
+    test_status: TestStatus
+    notes: list[str] = Field(default_factory=list)
+    created_at: datetime
+
+
 class RunResult(_StrictModel):
     """get_run_result 的只读返回。"""
 
     run: TestRun
     case_results: list[CaseResult] = Field(default_factory=list)
     artifacts: list[ArtifactRef] = Field(default_factory=list)
-    perf: dict[str, JsonValue] | None = None
+    perf: PerfResult | None = None

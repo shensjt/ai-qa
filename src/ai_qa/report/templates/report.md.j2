@@ -1,0 +1,118 @@
+# AI QA 测试报告：{{ run.run_id }}
+
+> 本报告的 verdict 来自确定性规则引擎；LLM 总结仅为草稿。
+
+## 概览
+
+| 项 | 值 |
+|---|---|
+| Run | `{{ run.run_id }}` |
+| Plan | `{{ plan.plan_id }}` |
+| 目标 | `{{ run.target_id }}` |
+| 模式 | `{{ run.mode.value }}` |
+| 目标 commit | `{{ run.commit or "未记录" }}` |
+| 计划修复次数 | {{ plan.repair_count }} |
+| 执行状态 | **{{ overall_execution.value }}** |
+| 规则 verdict | **{{ overall_verdict.value }}** |
+| 用例数 | {{ case_results | length }} |
+| Artifact 数 | {{ artifacts | length }} |
+| 生成时间 | {{ generated_at }} |
+
+## 测试范围
+
+- 目标：`{{ run.target_id }}`
+- 计划用例：{{ plan.items | map(attribute="case_id") | join("、") or "无" }}
+- 计划目标：{{ plan.plan.goal }}
+
+## 逐用例结果
+
+{% if case_results %}
+| 用例 | 执行状态 | Verdict | 断言数 |
+|---|---|---|---|
+{% for case in case_results %}
+| `{{ case.case_id }}` | {{ case.execution_status.value }} | **{{ case.test_status.value }}** | {{ case.assertions | length }} |
+{% endfor %}
+{% else %}
+本次 run 没有 HTTP 用例结果。
+{% endif %}
+
+{% for case in case_results %}
+### {{ case.case_id }}
+
+- 执行状态：{{ case.execution_status.value }}
+- Verdict：**{{ case.test_status.value }}**
+{% if case.error %}- 错误：`{{ case.error.code.value }}` {{ case.error.message }}
+{% endif %}
+{% if case.assertions %}
+| 断言 | 状态 | 期望 | 实际 | 消息 | 证据 |
+|---|---|---|---|---|---|
+{% for assertion in case.assertions %}
+| `{{ assertion.rule_id }}` | {{ assertion.status.value }} | {{ assertion.expected }} | {{ assertion.observed }} | {{ assertion.message or "—" }} | {{ assertion.evidence_refs | join(", ") or "—" }} |
+{% endfor %}
+{% else %}
+无断言结果。
+{% endif %}
+
+{% endfor %}
+
+## 性能（benchmark smoke）
+
+{% if perf %}
+- 工具：`{{ perf.tool }}`（{{ perf.tool_version }}）
+- 目标 URL：`{{ perf.target_url }}`
+- 配置：{{ perf.config }}
+- 状态：**{{ perf.test_status.value }}**
+- 说明：{{ perf.notes | join("；") }}
+- 原始输出：`{{ perf.raw_stdout.uri }}`
+{% if perf.raw_stderr %}- 原始 stderr：`{{ perf.raw_stderr.uri }}`
+{% endif %}
+{% if perf.metrics_artifact %}- 解析指标：`{{ perf.metrics_artifact.uri }}`
+{% endif %}
+
+| 指标 | 值 |
+|---|---|
+{% for key, value in perf.metrics.items() %}
+| {{ key }} | {{ value }} |
+{% endfor %}
+{% else %}
+本次 run 未执行 benchmark，或 benchmark 失败未产生 PerfResult。
+{% endif %}
+
+## MCP 协议事件
+
+{% if trace_counts %}
+| 事件 | 次数 |
+|---|---|
+{% for name, count in trace_counts.items() %}
+| `{{ name }}` | {{ count }} |
+{% endfor %}
+{% else %}
+trace 不可用。
+{% endif %}
+
+## LLM 总结草稿
+
+{% if summary %}
+{{ summary }}
+{% else %}
+本次 run 没有 LLM 总结草稿。
+{% endif %}
+
+## Artifact
+
+{% if artifacts %}
+| 名称 | 类型 | URI | 大小 | SHA-256 |
+|---|---|---|---|---|
+{% for artifact in artifacts %}
+| `{{ artifact.name }}` | {{ artifact.kind }} | `{{ artifact.uri }}` | {{ artifact.size_bytes }} | `{{ artifact.sha256[:16] }}…` |
+{% endfor %}
+{% else %}
+无 Artifact。
+{% endif %}
+
+## 限制与未验证项
+
+- 本报告只反映本次 run 在给定环境下的事实与规则断言。
+- 短压测仅作 benchmark smoke，无历史基线时性能状态为 INCONCLUSIVE。
+- 未验证长期稳定性、容量上限和内存泄漏。
+- LLM 总结为草稿，不参与 verdict 判定。
