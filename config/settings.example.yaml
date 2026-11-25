@@ -1,0 +1,54 @@
+# ai-qa-agent 配置示例。
+# 复制为 config/settings.yaml（已被 .gitignore 忽略），并把所有 /absolute/path/... 替换为真实绝对路径。
+schema_version: "1.0"
+project:
+  project_id: cpp-webserver
+  repo_root: /absolute/path/to/CPP
+  knowledge_root: knowledge
+
+target:
+  target_id: cpp-webserver-local
+  kind: cpp_webserver
+  executable_path: /absolute/path/to/web_server
+  working_directory: /absolute/path/to/CPP
+  www_root: /absolute/path/to/CPP/build/www
+  host: 127.0.0.1
+  port: 18080
+  threads: 4
+  timeout_seconds: 60
+  cache_bytes: 16777216
+  health_path: /healthz
+  startup_timeout_seconds: 10
+  stop_timeout_seconds: 5
+
+runtime:
+  run_timeout_seconds: 120
+  case_timeout_seconds: 8
+  max_cases: 6
+  max_log_chars_for_llm: 8000
+  allowed_target_hosts:
+    - 127.0.0.1
+  allowed_processes:
+    - /absolute/path/to/web_server
+    - /usr/bin/wrk
+
+knowledge:
+  embedding_model: Qwen/Qwen3-Embedding-0.6B
+  embedding_device: cpu
+  embedding_dim: 1024
+  distance: cosine
+  top_k: 8
+  chunk_target_tokens: 600
+  chunk_overlap_ratio: 0.1
+
+benchmark:
+  enabled_by_default: false
+  max_duration_seconds: 30
+  max_connections: 64
+  max_threads: 4
+  wrk_path: /usr/bin/wrk
+
+agent:
+  max_plan_repairs: 2
+  llm_timeout_seconds: 60
+  max_tool_calls: 4

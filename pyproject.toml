@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-qa-agent"
+description = "受约束的 AI 测试 Agent：RAG + DeepSeek 规划 + 确定性规则判定 + 真实 MCP 执行"
+readme = "README.md"
+requires-python = ">=3.11"
+dynamic = ["version"]
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    "pyyaml>=6.0.1",
+    "typer>=0.12",
+]
+
+[project.scripts]
+ai-qa = "ai_qa.cli:app"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.10",
+    "pre-commit>=3.7",
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "ruff==0.17.6",
+    "types-pyyaml>=6.0.12",
+]
+
+[tool.hatch.version]
+path = "src/ai_qa/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_qa"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+# 项目文档与 CLI 输出使用中文全角标点，不视为歧义字符。
+extend-ignore = ["E501", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+plugins = ["pydantic.mypy"]
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "contract: MCP 与接口契约测试",
+    "integration: 需要真实被测服务或外部工具的集成测试",
+    "e2e: 端到端测试",
+    "agent_llm: 需要真实 LLM API 的测试（默认不运行）",
+    "eval: RAG/Agent 评估测试",
+]
