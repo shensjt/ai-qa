@@ -1,0 +1,126 @@
+- question: 服务启动后使用什么路径做健康检查？
+  expected_sources:
+    - knowledge/project/runtime-contract.md
+  expected_terms:
+    - /healthz
+
+- question: /healthz 返回什么字段？
+  expected_sources:
+    - knowledge/project/runtime-contract.md
+  expected_terms:
+    - status
+    - commit
+
+- question: web_server 支持哪些启动参数？
+  expected_sources:
+    - knowledge/project/runtime-contract.md
+  expected_terms:
+    - --host
+    - --port
+    - --root
+
+- question: 默认端口、worker 线程数和 LRU 缓存大小分别是多少？
+  expected_sources:
+    - knowledge/project/runtime-contract.md
+  expected_terms:
+    - "8080"
+    - "16777216"
+
+- question: 服务收到 SIGTERM 后如何停机？
+  expected_sources:
+    - knowledge/project/runtime-contract.md
+  expected_terms:
+    - SIGTERM
+    - Stop
+
+- question: HTTP/1.1 默认是否保持连接？
+  expected_sources:
+    - knowledge/project/http-behavior.md
+  expected_terms:
+    - HTTP/1.1
+    - keep-alive
+
+- question: 同一连接连续发送多个请求时，服务器如何保证响应顺序？
+  expected_sources:
+    - knowledge/project/http-behavior.md
+  expected_terms:
+    - 流水线
+    - 顺序
+
+- question: HEAD 响应会发送消息体吗？
+  expected_sources:
+    - knowledge/project/http-behavior.md
+  expected_terms:
+    - HEAD
+    - 不发送 body
+
+- question: 路径穿越请求如何被拦截？
+  expected_sources:
+    - knowledge/project/http-behavior.md
+  expected_terms:
+    - weakly_canonical
+    - "403"
+
+- question: 请求行、Headers 和 Body 的上限分别是多少？
+  expected_sources:
+    - knowledge/project/http-behavior.md
+  expected_terms:
+    - 8KB
+    - 32KB
+    - 1MB
+
+- question: 没有 Content-Length 的 HTTP/1.1 消息如何定界？
+  expected_sources:
+    - knowledge/standards/rfc9112-summary.md
+  expected_terms:
+    - Content-Length
+    - 连接关闭
+
+- question: HTTP/1.1 持久连接的默认行为是什么？
+  expected_sources:
+    - knowledge/standards/rfc9112-summary.md
+  expected_terms:
+    - 默认持久连接
+    - "Connection: close"
+
+- question: 如何编译并运行 WebServer？
+  expected_sources:
+    - knowledge/tools/testing-tools.md
+  expected_terms:
+    - cmake
+    - build/server/web_server
+
+- question: 如何运行 CTest 和 Sanitizer 测试？
+  expected_sources:
+    - knowledge/tools/testing-tools.md
+  expected_terms:
+    - ctest
+    - ASan
+
+- question: keep-alive 场景的基准 QPS 是多少？
+  expected_sources:
+    - knowledge/benchmarks/http-baseline.md
+  expected_terms:
+    - 9.5k
+    - 23.5k
+
+- question: 分片请求的已知缺陷是什么？
+  expected_sources:
+    - knowledge/project/known-issues.md
+  expected_terms:
+    - "405"
+    - 请求行之后
+
+- question: 缓存协商支持哪些请求头？
+  expected_sources:
+    - knowledge/project/http-behavior.md
+  expected_terms:
+    - If-None-Match
+    - If-Modified-Since
+
+- question: wrk 压测有哪些常用参数和限制？
+  expected_sources:
+    - knowledge/tools/testing-tools.md
+  expected_terms:
+    - wrk
+    - 同机

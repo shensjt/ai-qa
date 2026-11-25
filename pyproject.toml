@@ -9,11 +9,14 @@ readme = "README.md"
 requires-python = ">=3.11"
 dynamic = ["version"]
 dependencies = [
+    "chromadb==1.5.9",
     "mcp==2.3.0",
     "pydantic>=2.7",
     "pydantic-settings>=2.2",
     "pyyaml>=6.0.1",
+    "sentence-transformers==6.3.0",
     "sqlalchemy>=2.0,<3.0",
+    "torch==2.15.0",
     "typer>=0.12",
 ]
 
@@ -35,6 +38,14 @@ path = "src/ai_qa/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ai_qa"]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
 
 [tool.ruff]
 line-length = 100

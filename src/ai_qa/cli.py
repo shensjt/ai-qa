@@ -11,10 +11,11 @@ import typer
 
 from ai_qa import __version__
 from ai_qa.application.fixed_plan_runner import FixedPlanExecution, FixedPlanRunner
-from ai_qa.bootstrap import build_app_context
+from ai_qa.bootstrap import build_app_context, build_knowledge_service
 from ai_qa.doctor import CheckStatus, DoctorReport, DoctorService
 from ai_qa.domain.enums import TestStatus
-from ai_qa.domain.errors import AiQaError, exit_code_for
+from ai_qa.domain.errors import AiQaError, ErrorCode, exit_code_for
+from ai_qa.domain.knowledge import RetrievalSnapshot
 from ai_qa.log import configure_logging
 from ai_qa.settings import load_settings, resolve_config_path
 from ai_qa.validation.validator import PlanValidationError
@@ -25,6 +26,8 @@ app = typer.Typer(
     invoke_without_command=True,
     add_completion=False,
 )
+knowledge_app = typer.Typer(help="知识库构建与检索。", no_args_is_help=True)
+app.add_typer(knowledge_app, name="knowledge")
 
 _STATUS_LABEL = {
     CheckStatus.OK: "[OK]  ",
@@ -171,3 +174,94 @@ def _verdict_exit_code(status: TestStatus) -> int:
     if status is TestStatus.FAIL:
         return 4
     return 0
+
+
+@knowledge_app.command("build")
+def knowledge_build(
+    project: Annotated[str, typer.Option("--project", help="项目 ID")],
+    manifest: Annotated[Path | None, typer.Option("--manifest", help="manifest 路径")] = None,
+    rebuild: Annotated[bool, typer.Option("--rebuild", help="清空并重建该项目知识")] = False,
+    config: Annotated[Path | None, typer.Option("--config", help="配置文件路径")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="以 JSON 输出")] = False,
+) -> None:
+    """按 manifest 构建/增量更新知识库。"""
+    context = None
+    try:
+        context = build_app_context(config)
+        if project != context.settings.project.project_id:
+            raise AiQaError(
+                ErrorCode.CONFIG_INVALID,
+                f"--project {project} 与配置中的 project_id 不一致",
+                details={"configured": context.settings.project.project_id},
+            )
+        report = build_knowledge_service(context).build(
+            manifest or context.paths.manifest, rebuild=rebuild
+        )
+    except AiQaError as exc:
+        _emit_fatal(exc, as_json=as_json)
+    finally:
+        if context is not None:
+            context.close()
+
+    if as_json:
+        typer.echo(report.model_dump_json(indent=2))
+        return
+    typer.echo(f"project: {report.project_id}")
+    typer.echo(
+        f"documents: total={report.documents_total} indexed={report.documents_indexed} "
+        f"skipped={report.documents_skipped} deleted={report.documents_deleted}"
+    )
+    typer.echo(f"chunks written: {report.chunks_written}")
+    typer.echo(f"collection: {report.collection or '(BM25 only)'}")
+    if report.degraded:
+        typer.echo(f"[WARN] 降级: {report.degradation_reason}")
+    if report.smoke_hits:
+        typer.echo("smoke hits:")
+        for hit in report.smoke_hits:
+            typer.echo(f"  - {hit}")
+
+
+@knowledge_app.command("search")
+def knowledge_search(
+    query: Annotated[str, typer.Argument(help="查询文本")],
+    top_k: Annotated[int, typer.Option("--top-k", min=1, max=50)] = 8,
+    source_type: Annotated[
+        list[str] | None, typer.Option("--source-type", help="可重复，按来源类型过滤")
+    ] = None,
+    config: Annotated[Path | None, typer.Option("--config", help="配置文件路径")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="以 JSON 输出")] = False,
+) -> None:
+    """检索知识库并展示引用来源。"""
+    context = None
+    try:
+        context = build_app_context(config)
+        snapshot = build_knowledge_service(context).search(
+            query,
+            top_k=top_k,
+            source_types=source_type,
+        )
+    except AiQaError as exc:
+        _emit_fatal(exc, as_json=as_json)
+    finally:
+        if context is not None:
+            context.close()
+
+    if as_json:
+        typer.echo(json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False, indent=2))
+        return
+    _render_snapshot(snapshot)
+
+
+def _render_snapshot(snapshot: RetrievalSnapshot) -> None:
+    if snapshot.degraded:
+        typer.echo(f"[WARN] BM25 降级: {snapshot.degradation_reason}")
+    if not snapshot.items:
+        typer.echo("无结果")
+        return
+    for item in snapshot.items:
+        typer.echo(
+            f"[{item.ref_id}] score={item.score:.4f} {item.priority} "
+            f"{item.source_path} :: {item.section}"
+        )
+        preview = " ".join(item.text.split())[:160]
+        typer.echo(f"    {preview}")

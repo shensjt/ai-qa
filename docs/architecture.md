@@ -39,7 +39,7 @@ CLI → RunOrchestrator
 - 无任意 shell、任意路径、任意 URL；外部进程使用 argv 数组、超时和 `finally` 清理。
 - 工具/环境错误映射为 ERROR，不能写成产品 FAIL；FAIL 必须带断言与证据。
 
-## 当前实现（Phase 0～3）
+## 当前实现（Phase 0～4）
 
 | 模块 | 职责 |
 |---|---|
@@ -74,5 +74,12 @@ CLI → RunOrchestrator
 | `ai_qa/mcp_server/server.py` | 独立 stdio Server、工具声明与调用分发 |
 | `ai_qa/mcp_server/tools.py` | 服务端 plan_hash/目标/Policy 复验与 ExecutionService 调用 |
 | `ai_qa/mcp_server/schemas.py` | 工具输入模型与 input/output JSON Schema |
+| `ai_qa/knowledge/chunking.py` | Markdown 标题/代码块/表格感知切块与稳定 hash |
+| `ai_qa/knowledge/ingest.py` | manifest、增量入库、陈旧 chunk 清理、Collection 校验 |
+| `ai_qa/knowledge/bm25.py` | 中文单字+双字 BM25 显式降级 |
+| `ai_qa/knowledge/eval.py` | Recall@5、MRR、无结果率、引用合法率 |
+| `ai_qa/adapters/qwen_embeddings.py` | Qwen3-Embedding-0.6B、query 指令、模型元数据 |
+| `ai_qa/adapters/chroma_store.py` | Chroma cosine collection、metadata 不一致拒绝复用 |
+| `ai_qa/application/knowledge_service.py` | 知识构建、向量检索、BM25 降级、RetrievalSnapshot/ref_id |
 
-RAG、Agent、wrk 与报告按 Phase 4～6 逐步加入；各阶段只创建需要的模块，不预先生成空文件。
+Agent、wrk 与报告按 Phase 5～6 逐步加入；各阶段只创建需要的模块，不预先生成空文件。

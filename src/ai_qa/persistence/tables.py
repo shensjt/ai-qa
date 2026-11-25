@@ -6,7 +6,7 @@ PROJECT/TARGET/SUITE/KNOWLEDGE/TOOL_CALL/PERF 在引入对应功能的阶段再�
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -140,3 +140,39 @@ class ArtifactRow(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class KnowledgeDocumentRow(Base):
+    __tablename__ = "knowledge_document"
+    __table_args__ = (
+        UniqueConstraint("project_id", "source_path", name="uq_knowledge_document_path"),
+    )
+
+    doc_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    source_path: Mapped[str] = mapped_column(Text, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    priority: Mapped[str] = mapped_column(String(8), nullable=False)
+    commit: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class KnowledgeChunkRow(Base):
+    __tablename__ = "knowledge_chunk"
+
+    chunk_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    doc_id: Mapped[str] = mapped_column(
+        ForeignKey("knowledge_document.doc_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    source_path: Mapped[str] = mapped_column(Text, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    priority: Mapped[str] = mapped_column(String(8), nullable=False)
+    commit: Mapped[str] = mapped_column(String(64), nullable=False)
+    section: Mapped[str] = mapped_column(Text, nullable=False)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)

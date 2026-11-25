@@ -26,6 +26,20 @@ uv pip install --python .venv/bin/python \
 uv sync --locked
 ```
 
+## RAG 依赖与模型
+
+- `torch` 通过 `pyproject.toml` 的 `pytorch-cpu` index 锁定为 CPU wheel；不要在本地用 CUDA 版本替代，否则锁文件会不一致。
+- 首次 `knowledge build` 会下载 `Qwen/Qwen3-Embedding-0.6B`（约 1.19GB）。国内建议：
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+export HF_HUB_DISABLE_XET=1   # 镜像环境下 Xet 可能反复重试
+uv run ai-qa knowledge build --project cpp-webserver --config config/settings.yaml
+```
+
+- 模型缓存位于 `HF_HOME`（默认 `~/.cache/huggingface`），不进入仓库。
+- 模型不可用时检索会显式降级 BM25，`ai-qa knowledge search` 会打印降级原因。
+
 ## 配置
 
 1. 复制 `config/settings.example.yaml` 为 `config/settings.yaml`。
@@ -69,6 +83,7 @@ uv run ai-qa run --plan examples/plans/http_smoke.json --config config/settings.
 - 需要真实 LLM 的测试标记 `agent_llm`，默认不进入 CI。
 - 契约测试标记 `contract`，端到端标记 `e2e`，评估标记 `eval`，真实目标集成标记 `integration`。
 - MCP 契约测试（`tests/contract/test_mcp_server.py`）启动真实 `ai_qa.mcp_server` 子进程，但使用内置假目标，不需要 C++ 二进制或 API Key。
+- RAG 评估默认跑 BM25（`make eval-rag`）；真实 Qwen Embedding 评估需要 `AI_QA_RUN_REAL_EMBEDDING=1`，首次运行会下载约 1.19GB 模型，国内建议 `HF_ENDPOINT=https://hf-mirror.com`。
 - 真实 C++ 目标测试（`tests/integration/test_real_webserver.py`）默认使用 `/home/cpp/CPP/build/server/web_server`，可用 `AI_QA_CPP_SERVER` 指定其他路径；目标不存在时明确 skip，不伪装通过。
 - 不删除或放宽失败断言来制造通过；无法运行的命令与未验证项必须如实报告。
 
@@ -80,7 +95,7 @@ uv run ai-qa run --plan examples/plans/http_smoke.json --config config/settings.
 | 1 | 领域模型、Catalog、Validator、Repository | 已完成 |
 | 2 | C++ Target、6 条 HTTP 用例、Rule | 已完成 |
 | 3 | 真实 MCP Server 与固定计划 E2E | 已完成 |
-| 4 | Qwen Embedding、Chroma、BM25 | 未开始 |
+| 4 | Qwen Embedding、Chroma、BM25 | 已完成 |
 | 5 | DeepSeek Agent 与修复循环 | 未开始 |
 | 6 | wrk、报告与 Demo | 未开始 |
 | 7 | 故障注入、安全、发布候选 | 未开始 |
@@ -125,7 +140,14 @@ src/ai_qa/
 │  └─ evaluator.py   # CaseFacts → CaseResult（唯一 verdict 来源）
 ├─ adapters/
 │  ├─ mcp_client.py  # 官方 SDK stdio 客户端（initialize/list/call）
+│  ├─ qwen_embeddings.py # Qwen3-Embedding-0.6B（sentence-transformers）
+│  ├─ chroma_store.py    # Chroma cosine collection 与 metadata 校验
 │  └─ trace.py       # JSONL 协议 trace
+├─ knowledge/
+│  ├─ chunking.py    # Markdown 感知切块（标题/代码块/表格/重叠）
+│  ├─ ingest.py      # manifest、hash、增量重建、陈旧清理
+│  ├─ bm25.py        # 中文单字+双字 BM25 降级
+│  └─ eval.py        # Recall@5 / MRR / 引用合法率
 ├─ mcp_server/
 │  ├─ __main__.py    # python -m ai_qa.mcp_server
 │  ├─ server.py      # 工具声明、调用分发、stdio 入口

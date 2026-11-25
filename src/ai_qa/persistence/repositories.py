@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ai_qa.domain.enums import (
@@ -20,6 +20,11 @@ from ai_qa.domain.enums import (
     TestStatus,
 )
 from ai_qa.domain.errors import AiQaError, ErrorCode, ErrorInfo
+from ai_qa.domain.knowledge import (
+    KnowledgeChunk,
+    KnowledgeDocument,
+    Priority,
+)
 from ai_qa.domain.models import TestRun, new_id, utc_now
 from ai_qa.domain.plans import (
     BenchmarkSpec,
@@ -32,6 +37,8 @@ from ai_qa.domain.results import ArtifactRef, AssertionResult, CaseFacts, CaseRe
 from ai_qa.persistence.tables import (
     ArtifactRow,
     AssertionResultRow,
+    KnowledgeChunkRow,
+    KnowledgeDocumentRow,
     PlanItemRow,
     RunCaseResultRow,
     TestPlanRow,
@@ -358,3 +365,168 @@ class SqlArtifactRepository:
                 )
                 for row in rows
             ]
+
+
+def _to_knowledge_document(row: KnowledgeDocumentRow) -> KnowledgeDocument:
+    return KnowledgeDocument(
+        doc_id=row.doc_id,
+        project_id=row.project_id,
+        source_path=row.source_path,
+        source_type=row.source_type,
+        priority=cast(Priority, row.priority),
+        commit=row.commit,
+        content_hash=row.content_hash,
+        updated_at=_to_dt(row.updated_at),
+    )
+
+
+def _to_knowledge_chunk(row: KnowledgeChunkRow) -> KnowledgeChunk:
+    return KnowledgeChunk(
+        chunk_id=row.chunk_id,
+        doc_id=row.doc_id,
+        project_id=row.project_id,
+        source_path=row.source_path,
+        source_type=row.source_type,
+        priority=cast(Priority, row.priority),
+        commit=row.commit,
+        section=row.section,
+        chunk_index=row.chunk_index,
+        content_hash=row.content_hash,
+        text=row.text,
+    )
+
+
+class SqlKnowledgeRepository:
+    def __init__(self, session_factory: sessionmaker[Session]) -> None:
+        self._session_factory = session_factory
+
+    def get_document(self, project_id: str, source_path: str) -> KnowledgeDocument | None:
+        with self._session_factory() as session:
+            row = session.execute(
+                select(KnowledgeDocumentRow).where(
+                    KnowledgeDocumentRow.project_id == project_id,
+                    KnowledgeDocumentRow.source_path == source_path,
+                )
+            ).scalar_one_or_none()
+            return _to_knowledge_document(row) if row is not None else None
+
+    def list_documents(self, project_id: str) -> list[KnowledgeDocument]:
+        with self._session_factory() as session:
+            rows = (
+                session.execute(
+                    select(KnowledgeDocumentRow)
+                    .where(KnowledgeDocumentRow.project_id == project_id)
+                    .order_by(KnowledgeDocumentRow.source_path)
+                )
+                .scalars()
+                .all()
+            )
+            return [_to_knowledge_document(row) for row in rows]
+
+    def save_document(self, document: KnowledgeDocument, chunks: list[KnowledgeChunk]) -> None:
+        with self._session_factory() as session:
+            existing = session.get(KnowledgeDocumentRow, document.doc_id)
+            if existing is None:
+                session.add(
+                    KnowledgeDocumentRow(
+                        doc_id=document.doc_id,
+                        project_id=document.project_id,
+                        source_path=document.source_path,
+                        source_type=document.source_type,
+                        priority=document.priority,
+                        commit=document.commit,
+                        content_hash=document.content_hash,
+                        updated_at=_iso(document.updated_at),
+                    )
+                )
+            else:
+                existing.project_id = document.project_id
+                existing.source_path = document.source_path
+                existing.source_type = document.source_type
+                existing.priority = document.priority
+                existing.commit = document.commit
+                existing.content_hash = document.content_hash
+                existing.updated_at = _iso(document.updated_at)
+
+            session.execute(
+                delete(KnowledgeChunkRow).where(KnowledgeChunkRow.doc_id == document.doc_id)
+            )
+            for chunk in chunks:
+                session.add(
+                    KnowledgeChunkRow(
+                        chunk_id=chunk.chunk_id,
+                        doc_id=chunk.doc_id,
+                        project_id=chunk.project_id,
+                        source_path=chunk.source_path,
+                        source_type=chunk.source_type,
+                        priority=chunk.priority,
+                        commit=chunk.commit,
+                        section=chunk.section,
+                        chunk_index=chunk.chunk_index,
+                        content_hash=chunk.content_hash,
+                        text=chunk.text,
+                    )
+                )
+            session.commit()
+
+    def delete_document(self, doc_id: str) -> list[str]:
+        with self._session_factory() as session:
+            chunk_ids = list(
+                session.execute(
+                    select(KnowledgeChunkRow.chunk_id).where(KnowledgeChunkRow.doc_id == doc_id)
+                )
+                .scalars()
+                .all()
+            )
+            session.execute(delete(KnowledgeChunkRow).where(KnowledgeChunkRow.doc_id == doc_id))
+            session.execute(
+                delete(KnowledgeDocumentRow).where(KnowledgeDocumentRow.doc_id == doc_id)
+            )
+            session.commit()
+            return chunk_ids
+
+    def delete_project(self, project_id: str) -> list[str]:
+        with self._session_factory() as session:
+            chunk_ids = list(
+                session.execute(
+                    select(KnowledgeChunkRow.chunk_id).where(
+                        KnowledgeChunkRow.project_id == project_id
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            session.execute(
+                delete(KnowledgeChunkRow).where(KnowledgeChunkRow.project_id == project_id)
+            )
+            session.execute(
+                delete(KnowledgeDocumentRow).where(KnowledgeDocumentRow.project_id == project_id)
+            )
+            session.commit()
+            return chunk_ids
+
+    def list_chunks(self, project_id: str) -> list[KnowledgeChunk]:
+        with self._session_factory() as session:
+            rows = (
+                session.execute(
+                    select(KnowledgeChunkRow)
+                    .where(KnowledgeChunkRow.project_id == project_id)
+                    .order_by(KnowledgeChunkRow.doc_id, KnowledgeChunkRow.chunk_index)
+                )
+                .scalars()
+                .all()
+            )
+            return [_to_knowledge_chunk(row) for row in rows]
+
+    def get_chunks(self, chunk_ids: list[str]) -> list[KnowledgeChunk]:
+        if not chunk_ids:
+            return []
+        with self._session_factory() as session:
+            rows = (
+                session.execute(
+                    select(KnowledgeChunkRow).where(KnowledgeChunkRow.chunk_id.in_(chunk_ids))
+                )
+                .scalars()
+                .all()
+            )
+            return [_to_knowledge_chunk(row) for row in rows]

@@ -26,6 +26,7 @@ from ai_qa.domain.results import (
 )
 from ai_qa.persistence.database import create_session_factory, create_sqlite_engine
 from ai_qa.persistence.migrations import (
+    SCHEMA_VERSION,
     SCHEMA_VERSION_KEY,
     initialize_schema,
     read_schema_version,
@@ -93,7 +94,7 @@ def _stored_plan(catalog: CaseCatalog) -> StoredPlan:
 
 def test_schema_version_and_pragmas(engine: Engine, session_factory: sessionmaker[Session]) -> None:
     with session_factory() as session:
-        assert read_schema_version(session) == "1"
+        assert read_schema_version(session) == SCHEMA_VERSION
 
     initialize_schema(engine, session_factory)
 

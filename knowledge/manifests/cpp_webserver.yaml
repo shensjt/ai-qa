@@ -1,0 +1,22 @@
+project_id: cpp-webserver
+commit: 747442a3962d2f33639db342707e933459da7a34
+documents:
+  - source_path: knowledge/project/runtime-contract.md
+    source_type: project_doc
+    priority: P0
+  - source_path: knowledge/project/http-behavior.md
+    source_type: project_doc
+    priority: P0
+  - source_path: knowledge/project/known-issues.md
+    source_type: project_doc
+    priority: P0
+  - source_path: knowledge/standards/rfc9112-summary.md
+    source_type: standard
+    priority: P1
+    source_url: https://www.rfc-editor.org/rfc/rfc9112
+  - source_path: knowledge/tools/testing-tools.md
+    source_type: tool_doc
+    priority: P2
+  - source_path: knowledge/benchmarks/http-baseline.md
+    source_type: benchmark_note
+    priority: P2

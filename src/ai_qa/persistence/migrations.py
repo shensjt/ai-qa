@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ai_qa.domain.errors import AiQaError, ErrorCode
 from ai_qa.persistence.tables import Base, SchemaMetaRow
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 SCHEMA_VERSION_KEY = "schema_version"
 
 
@@ -19,6 +19,11 @@ def initialize_schema(engine: Engine, session_factory: sessionmaker[Session]) ->
         row = session.get(SchemaMetaRow, SCHEMA_VERSION_KEY)
         if row is None:
             session.add(SchemaMetaRow(key=SCHEMA_VERSION_KEY, value=SCHEMA_VERSION))
+            session.commit()
+            return
+        if row.value == "1":
+            # v1 -> v2 是纯增量：create_all 已补建知识库表。
+            row.value = SCHEMA_VERSION
             session.commit()
             return
         if row.value != SCHEMA_VERSION:

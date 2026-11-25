@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: setup format lint typecheck test check doctor test-contract test-e2e eval-rag clean
+.PHONY: setup format lint typecheck test check doctor test-contract test-e2e eval-rag eval-rag-real clean
 
 setup:
 	$(UV) sync --locked
@@ -30,6 +30,9 @@ test-e2e:
 eval-rag:
 	@$(UV) run pytest -m eval -q; status=$$?; \
 	if [ $$status -eq 5 ]; then echo "尚无 eval 测试（Phase 4 引入）"; else exit $$status; fi
+
+eval-rag-real:
+	AI_QA_RUN_REAL_EMBEDDING=1 $(UV) run pytest -m eval -q -s
 
 check: lint typecheck test
 

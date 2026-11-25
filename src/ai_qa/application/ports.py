@@ -10,6 +10,12 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from ai_qa.domain.knowledge import (
+    EmbeddingMetadata,
+    KnowledgeChunk,
+    KnowledgeDocument,
+    RetrievalQuery,
+)
 from ai_qa.domain.models import TestRun
 from ai_qa.domain.plans import ResolvedPlanItem, StoredPlan
 from ai_qa.domain.results import ArtifactRef, CaseFacts, CaseResult
@@ -137,3 +143,45 @@ class McpToolGateway(Protocol):
     async def call_tool(
         self, call: ToolCall, *, timeout_seconds: float | None = None
     ) -> McpCallResult: ...
+
+
+class KnowledgeRepository(Protocol):
+    def get_document(self, project_id: str, source_path: str) -> KnowledgeDocument | None: ...
+
+    def list_documents(self, project_id: str) -> list[KnowledgeDocument]: ...
+
+    def save_document(self, document: KnowledgeDocument, chunks: list[KnowledgeChunk]) -> None: ...
+
+    def delete_document(self, doc_id: str) -> list[str]: ...
+
+    def delete_project(self, project_id: str) -> list[str]: ...
+
+    def list_chunks(self, project_id: str) -> list[KnowledgeChunk]: ...
+
+    def get_chunks(self, chunk_ids: list[str]) -> list[KnowledgeChunk]: ...
+
+
+class EmbeddingProvider(Protocol):
+    def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
+
+    def embed_query(self, text: str) -> list[float]: ...
+
+    def metadata(self) -> EmbeddingMetadata: ...
+
+
+class VectorStore(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def metadata(self) -> EmbeddingMetadata: ...
+
+    def upsert(self, chunks: list[KnowledgeChunk], vectors: list[list[float]]) -> None: ...
+
+    def delete(self, chunk_ids: list[str]) -> None: ...
+
+    def search(
+        self, query: RetrievalQuery, vector: list[float], limit: int
+    ) -> list[tuple[str, float]]: ...
+
+    def reset(self) -> None: ...
