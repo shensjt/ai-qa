@@ -97,7 +97,8 @@ uv run ai-qa show <run_id> --config config/settings.yaml
 - 契约测试标记 `contract`，端到端标记 `e2e`，评估标记 `eval`，真实目标集成标记 `integration`。
 - MCP 契约测试（`tests/contract/test_mcp_server.py`）启动真实 `ai_qa.mcp_server` 子进程，但使用内置假目标，不需要 C++ 二进制或 API Key。
 - RAG 评估默认跑 BM25（`make eval-rag`）；真实 Qwen Embedding 评估需要 `AI_QA_RUN_REAL_EMBEDDING=1`，首次运行会下载约 1.19GB 模型，国内建议 `HF_ENDPOINT=https://hf-mirror.com`。
-- 真实 C++ 目标测试（`tests/integration/test_real_webserver.py`）默认使用 `/home/cpp/CPP/build/server/web_server`，可用 `AI_QA_CPP_SERVER` 指定其他路径；目标不存在时明确 skip，不伪装通过。
+- 真实 C++ 目标测试（`tests/integration/test_real_webserver.py`）必须通过 `AI_QA_CPP_SERVER` 指定编译后的 WebServer 路径；未设置或不存在时明确 skip，不伪装通过。
+- 安全审计与故障注入覆盖表见 [security.md](security.md)。
 - 真实 DeepSeek 测试标记 `agent_llm`，需要 `DEEPSEEK_API_KEY`；默认 `make check` 通过 `-m 'not agent_llm'` 排除。显式运行：`uv run pytest -m agent_llm -q -s`。Agent 模式的 Key 只从环境变量或本地 `.env` 读取，不进入 MCP Server 环境。
 - 不删除或放宽失败断言来制造通过；无法运行的命令与未验证项必须如实报告。
 
@@ -112,7 +113,7 @@ uv run ai-qa show <run_id> --config config/settings.yaml
 | 4 | Qwen Embedding、Chroma、BM25 | 已完成 |
 | 5 | DeepSeek Agent 与修复循环 | 已完成 |
 | 6 | wrk、报告与 Demo | 已完成 |
-| 7 | 故障注入、安全、发布候选 | 未开始 |
+| 7 | 故障注入、安全、发布候选 | 已完成 |
 
 ## 代码结构（当前）
 
@@ -149,6 +150,7 @@ src/ai_qa/
 │  ├─ http_executor.py  # 6 条用例的事实采集
 │  ├─ target_manager.py # 目标进程生命周期
 │  ├─ wrk_executor.py   # wrk 短压测、argv 白名单、指标解析
+│  ├─ process.py        # 子进程最小环境（密钥隔离）
 │  └─ registry.py       # Executor 注册表
 ├─ rules/
 │  ├─ http_rules.py  # 确定性断言

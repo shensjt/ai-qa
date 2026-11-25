@@ -243,3 +243,38 @@ def test_stop_escalates_to_sigkill(tmp_path: Path) -> None:
     assert manager.is_running is False
     with pytest.raises(OSError):
         socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+
+
+ENV_PROBE = """#!/usr/bin/env python3
+import os
+import time
+
+open("env_probe.txt", "w", encoding="utf-8").write(
+    os.environ.get("DEEPSEEK_API_KEY", "unset")
+)
+time.sleep(5)
+"""
+
+
+def test_target_does_not_inherit_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "cpp"
+    www = root / "www"
+    www.mkdir(parents=True)
+    executable = _write_executable(root / "probe", ENV_PROBE)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-do-not-leak")
+    manager = TargetManager(
+        _config(
+            executable,
+            root,
+            www,
+            _free_port(),
+            startup_timeout_seconds=0.3,
+            stop_timeout_seconds=0.5,
+        ),
+        tmp_path / "logs",
+    )
+
+    with pytest.raises(AiQaError):
+        manager.start()
+
+    assert (root / "env_probe.txt").read_text(encoding="utf-8") == "unset"

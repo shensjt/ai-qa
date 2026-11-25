@@ -334,3 +334,20 @@ def test_evaluation_is_deterministic() -> None:
     second = evaluator.evaluate_case(_item("http.get_index"), facts)
 
     assert first == second
+
+
+def test_fail_without_evidence_is_rule_engine_error() -> None:
+    now = utc_now()
+    facts = CaseFacts(
+        case_id="http.get_index",
+        started_at=now,
+        ended_at=now,
+        observed={"status": 500, "headers": {}, "body_length": 0},
+        artifacts=[],
+    )
+
+    result = RuleEvaluatorImpl().evaluate_case(_item("http.get_index"), facts)
+
+    assert result.test_status is Status.ERROR
+    assert result.error is not None
+    assert result.error.code is ErrorCode.RULE_ENGINE_ERROR

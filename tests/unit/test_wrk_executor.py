@@ -168,3 +168,28 @@ def test_nonzero_exit_maps_to_tool_error(tmp_path: Path) -> None:
 
     assert excinfo.value.code is ErrorCode.MCP_TOOL_ERROR
     assert excinfo.value.details["exit_code"] == 2
+
+
+ENV_WRK = """#!/bin/sh
+if [ "$1" = "--version" ]; then echo "wrk 4.2.0"; exit 0; fi
+echo "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-unset}"
+"""
+
+
+def test_child_process_does_not_inherit_api_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wrk = _script(tmp_path, "wrk", ENV_WRK)
+    store = FileArtifactStore(tmp_path / "artifacts")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-do-not-leak")
+
+    perf = _executor(tmp_path, wrk).run(
+        run_id="run_1",
+        target_url="http://127.0.0.1:8080/",
+        benchmark=_benchmark(),
+        artifact_store=store,
+    )
+
+    stdout = (tmp_path / "artifacts" / perf.raw_stdout.uri).read_text(encoding="utf-8")
+    assert "sk-do-not-leak" not in stdout
+    assert "DEEPSEEK_API_KEY=unset" in stdout

@@ -21,6 +21,7 @@ from ai_qa.domain.errors import AiQaError, ErrorCode
 from ai_qa.domain.models import new_id, utc_now
 from ai_qa.domain.plans import BenchmarkSpec
 from ai_qa.domain.results import ArtifactRef, PerfResult
+from ai_qa.execution.process import minimal_child_env
 from ai_qa.validation.params import validate_http_path
 
 _TOOL_VERSION = re.compile(r"^(wrk\s+\S+)")
@@ -86,6 +87,7 @@ class WrkExecutor:
                 timeout=timeout,
                 shell=False,
                 check=False,
+                env=minimal_child_env(),
             )
             stdout = completed.stdout
             stderr = completed.stderr
@@ -224,6 +226,7 @@ class WrkExecutor:
                 shell=False,
                 check=False,
                 text=True,
+                env=minimal_child_env(),
             )
         except (OSError, subprocess.TimeoutExpired):
             return "unknown"

@@ -22,7 +22,6 @@ from ai_qa.validation.validator import PlanValidator, ValidationContext
 pytestmark = pytest.mark.integration
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-WEB_SERVER = Path(os.environ.get("AI_QA_CPP_SERVER", "/home/cpp/CPP/build/server/web_server"))
 TARGET_ID = "cpp-webserver-local"
 SECRET_MARKER = "TOP-SECRET-MARKER-12345"
 
@@ -71,9 +70,18 @@ def _plan():  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture
+def web_server() -> Path:
+    raw = os.environ.get("AI_QA_CPP_SERVER", "").strip()
+    if not raw:
+        pytest.skip("设置 AI_QA_CPP_SERVER 指向编译后的 C++ WebServer")
+    server = Path(raw).expanduser()
+    if not server.is_file():
+        pytest.skip(f"AI_QA_CPP_SERVER 不存在: {server}")
+    return server
+
+
+@pytest.fixture
 def website(tmp_path: Path) -> Path:
-    if not WEB_SERVER.is_file():
-        pytest.skip(f"真实 C++ WebServer 不存在: {WEB_SERVER}（先编译 CPP 仓库）")
     fixture_root = tmp_path / "fixture"
     www = fixture_root / "www"
     www.mkdir(parents=True)
@@ -84,11 +92,11 @@ def website(tmp_path: Path) -> Path:
     return www
 
 
-def test_real_webserver_six_cases(tmp_path: Path, website: Path) -> None:
+def test_real_webserver_six_cases(tmp_path: Path, website: Path, web_server: Path) -> None:
     port = _free_port()
     target = TargetManager(
         TargetConfig(
-            executable_path=WEB_SERVER,
+            executable_path=web_server,
             working_directory=tmp_path,
             www_root=website,
             host="127.0.0.1",
@@ -100,7 +108,7 @@ def test_real_webserver_six_cases(tmp_path: Path, website: Path) -> None:
             startup_timeout_seconds=10,
             stop_timeout_seconds=5.0,
             allowed_hosts=("127.0.0.1",),
-            allowed_processes=(WEB_SERVER,),
+            allowed_processes=(web_server,),
         ),
         log_dir=tmp_path / "target-logs",
     )
@@ -130,6 +138,15 @@ def test_real_webserver_six_cases(tmp_path: Path, website: Path) -> None:
     assert split_result.execution_status is ExecutionStatus.SUCCEEDED
     assert split_result.facts is not None
     assert "split" in split_result.facts.observed
+
+    for result in results:
+        if result.test_status is Status.FAIL:
+            assert result.execution_status is ExecutionStatus.SUCCEEDED
+            assert any(
+                assertion.evidence_refs
+                for assertion in result.assertions
+                if assertion.status is Status.FAIL
+            )
 
     assert target.is_running is False
     with pytest.raises(OSError):

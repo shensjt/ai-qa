@@ -18,6 +18,7 @@ from typing import IO
 
 from ai_qa.domain.errors import AiQaError, ErrorCode
 from ai_qa.execution.http_protocol import HttpConnection, HttpProtocolError, build_request
+from ai_qa.execution.process import minimal_child_env
 from ai_qa.settings import AppSettings, TargetSettings
 
 LOGGER = logging.getLogger(__name__)
@@ -121,6 +122,7 @@ class TargetManager:
                 stdin=subprocess.DEVNULL,
                 stdout=self._stdout_handle,
                 stderr=self._stderr_handle,
+                env=minimal_child_env(),
                 start_new_session=True,
                 shell=False,
             )

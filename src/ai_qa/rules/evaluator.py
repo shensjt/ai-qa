@@ -40,6 +40,20 @@ class RuleEvaluatorImpl:
                 ),
             )
 
+        for assertion in assertions:
+            if assertion.status is TestStatus.FAIL and not assertion.evidence_refs:
+                return CaseResult(
+                    case_id=item.case_id,
+                    execution_status=ExecutionStatus.SUCCEEDED,
+                    test_status=TestStatus.ERROR,
+                    facts=facts,
+                    assertions=assertions,
+                    error=ErrorInfo(
+                        code=ErrorCode.RULE_ENGINE_ERROR,
+                        message=f"FAIL 缺少 evidence_refs: {assertion.rule_id}",
+                    ),
+                )
+
         test_status = aggregate_test_status(assertion.status for assertion in assertions)
         return CaseResult(
             case_id=item.case_id,
