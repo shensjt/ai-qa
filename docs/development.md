@@ -62,6 +62,7 @@ make doctor       # 对示例配置运行 doctor（预期报错，见 README）
 - `pytest` 默认只跑不需要真实 LLM/真实 C++ 目标的测试。
 - 需要真实 LLM 的测试标记 `agent_llm`，默认不进入 CI。
 - 契约测试标记 `contract`，端到端标记 `e2e`，评估标记 `eval`，真实目标集成标记 `integration`。
+- 真实 C++ 目标测试（`tests/integration/test_real_webserver.py`）默认使用 `/home/cpp/CPP/build/server/web_server`，可用 `AI_QA_CPP_SERVER` 指定其他路径；目标不存在时明确 skip，不伪装通过。
 - 不删除或放宽失败断言来制造通过；无法运行的命令与未验证项必须如实报告。
 
 ## 阶段状态
@@ -70,7 +71,7 @@ make doctor       # 对示例配置运行 doctor（预期报错，见 README）
 |---|---|---|
 | 0 | 仓库与工程骨架 | 已完成 |
 | 1 | 领域模型、Catalog、Validator、Repository | 已完成 |
-| 2 | C++ Target、6 条 HTTP 用例、Rule | 未开始 |
+| 2 | C++ Target、6 条 HTTP 用例、Rule | 已完成 |
 | 3 | 真实 MCP Server 与固定计划 E2E | 未开始 |
 | 4 | Qwen Embedding、Chroma、BM25 | 未开始 |
 | 5 | DeepSeek Agent 与修复循环 | 未开始 |
@@ -106,8 +107,17 @@ src/ai_qa/
 │  └─ repositories.py# Plan / Run / Result / Artifact Repository
 ├─ artifacts/
 │  └─ store.py       # 原子写入、防路径逃逸
+├─ execution/
+│  ├─ http_protocol.py  # 原始 HTTP/1.1 客户端与响应解析
+│  ├─ http_executor.py  # 6 条用例的事实采集
+│  ├─ target_manager.py # 目标进程生命周期
+│  └─ registry.py       # Executor 注册表
+├─ rules/
+│  ├─ http_rules.py  # 确定性断言
+│  └─ evaluator.py   # CaseFacts → CaseResult（唯一 verdict 来源）
 └─ application/
-   └─ ports.py       # Repository / ArtifactStore 协议
+   ├─ ports.py       # Repository / ArtifactStore / Target / Executor / Evaluator 协议
+   └─ execution_service.py  # 启停目标 + 逐条执行 + 持久化
 ```
 
 依赖方向：`cli/doctor/validation/persistence/artifacts` → `application.ports`/`domain`。`domain` 不导入任何第三方框架；Repository 不跨线程共享 Session。

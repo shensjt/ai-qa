@@ -59,6 +59,13 @@ CLI → RunOrchestrator
 | `ai_qa/validation/repair.py` | 计划修复预算（最多 2 次） |
 | `ai_qa/persistence/*` | SQLite schema version、WAL/busy_timeout、四个 Repository |
 | `ai_qa/artifacts/store.py` | 原子写入、SHA-256、防 `../`/符号链接逃逸 |
-| `ai_qa/application/ports.py` | Plan/Run/Result/Artifact Repository 与 ArtifactStore 协议 |
+| `ai_qa/execution/http_protocol.py` | 原始 HTTP/1.1 客户端、Content-Length 边界、多响应缓冲 |
+| `ai_qa/execution/http_executor.py` | 6 条用例的事实采集（GET/HEAD/keep-alive/pipeline/split/traversal） |
+| `ai_qa/execution/target_manager.py` | 白名单进程、端口检查、`/healthz` 就绪、进程组 SIGTERM→SIGKILL、日志收集 |
+| `ai_qa/execution/registry.py` | Executor 按 kind 分发 |
+| `ai_qa/rules/http_rules.py` | 确定性断言（状态、长度、连接复用、顺序、秘密泄露） |
+| `ai_qa/rules/evaluator.py` | CaseFacts → CaseResult，区分 ERROR 与产品 FAIL |
+| `ai_qa/application/execution_service.py` | 启动目标、逐条执行、规则判定、持久化、finally 清理 |
+| `ai_qa/application/ports.py` | Plan/Run/Result/Artifact Repository、ArtifactStore、Target/Executor/Evaluator 协议 |
 
-执行器、MCP Server、RAG、Agent 与报告按 Phase 2～6 逐步加入；各阶段只创建需要的模块，不预先生成空文件。
+MCP Server、RAG、Agent 与报告按 Phase 3～6 逐步加入；各阶段只创建需要的模块，不预先生成空文件。

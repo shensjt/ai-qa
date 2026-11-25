@@ -5,11 +5,12 @@ Phase 1 只定义已经实现并由 Repository/ArtifactStore 满足的接口。
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Protocol
 
 from ai_qa.domain.models import TestRun
-from ai_qa.domain.plans import StoredPlan
-from ai_qa.domain.results import ArtifactRef, CaseResult
+from ai_qa.domain.plans import ResolvedPlanItem, StoredPlan
+from ai_qa.domain.results import ArtifactRef, CaseFacts, CaseResult
 
 
 class PlanRepository(Protocol):
@@ -58,3 +59,45 @@ class ArtifactStore(Protocol):
         *,
         mime: str | None = None,
     ) -> ArtifactRef: ...
+
+
+@dataclass(frozen=True)
+class ExecutionContext:
+    """一次 Run 的执行上下文；由应用层构造，执行器只读。"""
+
+    run_id: str
+    host: str
+    port: int
+    health_path: str
+    artifact_store: ArtifactStore
+    secret_marker: str | None = None
+    split_delay_seconds: float = 0.005
+
+    @property
+    def host_header(self) -> str:
+        return f"{self.host}:{self.port}"
+
+
+class TargetController(Protocol):
+    def start(self) -> None: ...
+
+    def stop(self) -> None: ...
+
+    @property
+    def host(self) -> str: ...
+
+    @property
+    def port(self) -> int: ...
+
+    @property
+    def health_path(self) -> str: ...
+
+
+class TestExecutor(Protocol):
+    kind: str
+
+    def execute(self, item: ResolvedPlanItem, context: ExecutionContext) -> CaseFacts: ...
+
+
+class RuleEvaluator(Protocol):
+    def evaluate_case(self, item: ResolvedPlanItem, facts: CaseFacts) -> CaseResult: ...

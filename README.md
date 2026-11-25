@@ -10,8 +10,9 @@
 
 - **Phase 0：工程骨架**。uv 工程、src layout、Pydantic Settings、统一错误模型、结构化日志、Typer CLI、`ai-qa doctor`、Ruff/mypy/pytest/pre-commit/Makefile/CI。
 - **Phase 1：领域模型与计划校验**。状态枚举、TestPlan / CaseFacts / CaseResult / ToolResult、6 条 HTTP case 的 Catalog、四层校验（Schema/Catalog/Policy/Reference）+ plan_hash、修复预算、SQLite Repository（schema version、WAL、busy_timeout）、防路径逃逸的 Artifact Store。
+- **Phase 2：真实 C++ Target 与 HTTP 执行**。TargetManager（白名单进程、端口检查、`/healthz` 就绪、进程组 SIGTERM→SIGKILL、finally 清理）、原始 socket HTTP 客户端、6 条用例执行器、独立规则引擎、ExecutionService，以及在真实 C++ WebServer 上的端到端验证。
 
-尚未实现（后续阶段）：HTTP/wrk 执行器、MCP Server、RAG、DeepSeek Agent、报告与 CLI 运行命令。
+尚未实现（后续阶段）：MCP Server、RAG、DeepSeek Agent、报告、固定计划 CLI 与 Demo。
 
 ## 环境要求
 
@@ -66,9 +67,11 @@ make check       # lint + typecheck + test
 
 ## 已知限制
 
-- 已完成 Phase 0～1；没有执行器、MCP、RAG 或 LLM。
-- 计划校验与持久化已有单元/集成测试覆盖，但尚未接入 CLI 运行入口（Phase 3 的固定计划 E2E）。
+- 已完成 Phase 0～2；没有 MCP、RAG 或 LLM。
+- 计划校验、持久化与 HTTP 执行已有单元/集成测试；固定计划还没有 CLI 入口（Phase 3）。
 - 数据库只建立计划、运行、结果、断言、Artifact 五组表；PROJECT/TARGET/SUITE/KNOWLEDGE/TOOL_CALL/PERF 在对应阶段加入。
+- 真实 C++ 集成测试默认寻找 `/home/cpp/CPP/build/server/web_server`，可用 `AI_QA_CPP_SERVER` 覆盖；找不到时明确 skip。
+- 已知被测 C++ WebServer 缺陷：请求在请求行之后分片到达会返回 405，`http.split_request` 会判 FAIL。这是产品行为问题，不是测试框架错误。
 - `make test-contract` / `test-e2e` / `eval-rag` 在对应阶段之前没有测试可收集。
-- 示例配置不包含真实 C++ 路径，`doctor` 无法通过。
+- 示例配置不包含真实 C++ 路径，`doctor` 无法通过；本地 `config/settings.yaml` 已被 gitignore。
 - 开发约束见 [CLAUDE.md](CLAUDE.md)，开发流程见 [docs/development.md](docs/development.md)。
