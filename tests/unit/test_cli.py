@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -9,6 +10,13 @@ from ai_qa import __version__
 from ai_qa.cli import app
 
 runner = CliRunner()
+
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    return _ANSI.sub("", text)
 
 
 def _combined(result: object) -> str:
@@ -21,7 +29,7 @@ def test_help_lists_doctor() -> None:
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    assert "doctor" in result.output
+    assert "doctor" in _plain(result.output)
 
 
 def test_version_flag() -> None:
@@ -59,5 +67,6 @@ def test_doctor_help_lists_options() -> None:
     result = runner.invoke(app, ["doctor", "--help"])
 
     assert result.exit_code == 0
-    assert "--config" in result.output
-    assert "--json" in result.output
+    help_text = _plain(result.output)
+    assert "--config" in help_text
+    assert "--json" in help_text
