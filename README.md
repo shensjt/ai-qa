@@ -1,5 +1,7 @@
 # ai-qa-agent
 
+[![ci](https://github.com/shensjt/ai-qa/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shensjt/ai-qa/actions/workflows/ci.yml)
+
 受约束的 AI 测试 Agent（MVP）：
 
 > RAG 提供带来源的项目知识，DeepSeek 生成结构化测试计划，确定性程序校验计划，Agent 通过真实 MCP 调用测试工具，HTTP/wrk 执行器产生事实，独立规则引擎判定结果，LLM 最后生成总结草稿。
@@ -86,7 +88,7 @@ make check       # lint + typecheck + test
 
 ## 已知限制
 
-- Phase 0～7 已完成；CI 未在本环境之外验证，干净环境安装步骤未独立复验（见“未验证项”）。
+- Phase 0～7 已完成；GitHub Actions CI 已通过，干净 clone 的 `uv sync --locked` + `make check` 已复验。
 - wrk 只做短压测 smoke：无基线时 INCONCLUSIVE，不做容量结论、不自动判定内存泄漏。
 - Agent 真实测试需要 `DEEPSEEK_API_KEY`（本地 `.env` 或环境变量），默认测试集排除 `agent_llm`；显式运行 `uv run pytest -m agent_llm -q -s`。默认模型 `deepseek-flash` 已实测可用。
 - RAG 默认 `Qwen/Qwen3-Embedding-0.6B`（CPU，约 1.19GB）；首次运行需下载模型，国内建议 `HF_ENDPOINT=https://hf-mirror.com`。不可用时显式 BM25 降级并在 snapshot 中标记。
