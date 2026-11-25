@@ -39,14 +39,26 @@ CLI → RunOrchestrator
 - 无任意 shell、任意路径、任意 URL；外部进程使用 argv 数组、超时和 `finally` 清理。
 - 工具/环境错误映射为 ERROR，不能写成产品 FAIL；FAIL 必须带断言与证据。
 
-## 当前实现（Phase 0）
+## 当前实现（Phase 0～1）
 
 | 模块 | 职责 |
 |---|---|
+| `ai_qa/domain/enums.py` | TestStatus / ExecutionStatus / RunState / PlanMode / 保守聚合 |
 | `ai_qa/domain/errors.py` | 错误码、ErrorInfo、AiQaError、退出码映射 |
+| `ai_qa/domain/plans.py` | TestPlan、PlanItem、ResolvedPlanItem、StoredPlan、规范化 plan_hash |
+| `ai_qa/domain/results.py` | CaseFacts、AssertionResult、CaseResult、ToolResult |
+| `ai_qa/domain/models.py` | TestRun、ID 生成、UTC 时间 |
 | `ai_qa/settings.py` | 配置 schema（strict）、YAML 加载、CONFIG_INVALID 映射 |
 | `ai_qa/log.py` | JSON 日志格式、敏感键脱敏 |
 | `ai_qa/doctor.py` | 只读诊断：路径、白名单进程、wrk、可写目录、密钥是否存在 |
 | `ai_qa/cli.py` | `--version`、`doctor`，统一错误输出与退出码 |
+| `ai_qa/validation/catalog.py` | 6 条 HTTP case 的受信 Catalog 与完整性校验 |
+| `ai_qa/validation/params.py` | 参数类型、request-target 与攻击路径白名单 |
+| `ai_qa/validation/policy.py` | 从 Settings 推导服务端资源上限 |
+| `ai_qa/validation/validator.py` | Schema/Catalog/Policy/Reference 四层校验，产出 StoredPlan |
+| `ai_qa/validation/repair.py` | 计划修复预算（最多 2 次） |
+| `ai_qa/persistence/*` | SQLite schema version、WAL/busy_timeout、四个 Repository |
+| `ai_qa/artifacts/store.py` | 原子写入、SHA-256、防 `../`/符号链接逃逸 |
+| `ai_qa/application/ports.py` | Plan/Run/Result/Artifact Repository 与 ArtifactStore 协议 |
 
-执行器、MCP Server、RAG、Agent、持久化与报告按 Phase 1～6 逐步加入；各阶段只创建需要的模块，不预先生成空文件。
+执行器、MCP Server、RAG、Agent 与报告按 Phase 2～6 逐步加入；各阶段只创建需要的模块，不预先生成空文件。

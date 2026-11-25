@@ -1,0 +1,86 @@
+schema_version: "1.0"
+suite_id: http_smoke
+cases:
+  - case_id: http.get_index
+    executor: http
+    description: 请求站点首页并验证基本 HTTP 响应
+    params:
+      path:
+        type: http_path
+        default: /
+        description: 请求路径
+    timeout_seconds: 5
+    rule_set: http.get_index
+    artifact_policy: http_exchange
+
+  - case_id: http.head
+    executor: http
+    description: 验证 HEAD 响应语义（无响应体）
+    params:
+      path:
+        type: http_path
+        default: /
+        description: 请求路径
+    timeout_seconds: 5
+    rule_set: http.head
+    artifact_policy: http_exchange
+
+  - case_id: http.keep_alive
+    executor: http
+    description: 同一连接顺序发送两个请求，验证连接复用
+    params:
+      path:
+        type: http_path
+        default: /
+        description: 请求路径
+    timeout_seconds: 8
+    rule_set: http.keep_alive
+    artifact_policy: http_exchange
+
+  - case_id: http.pipelined
+    executor: http
+    description: 同一连接连续发送两个请求，验证流水线解析
+    params:
+      path:
+        type: http_path
+        default: /
+        description: 请求路径
+    timeout_seconds: 8
+    rule_set: http.pipelined
+    artifact_policy: http_exchange
+
+  - case_id: http.split_request
+    executor: http
+    description: 将同一请求分片发送，验证消息解析
+    params:
+      path:
+        type: http_path
+        default: /
+        description: 请求路径
+      split_sizes:
+        type: integer_list
+        default: [1, 3, 7]
+        description: 每次发送的字节数序列
+        min_items: 1
+        max_items: 16
+        min_value: 1
+        max_value: 64
+    timeout_seconds: 8
+    rule_set: http.split_request
+    artifact_policy: raw_http_exchange
+
+  - case_id: http.path_traversal
+    executor: http
+    description: 使用原始 socket 发送路径穿越请求，验证不能读取站点根目录外文件
+    params:
+      path:
+        type: attack_path
+        default: /../outside_secret.txt
+        description: Catalog 显式允许的穿越请求路径
+        allowed_values:
+          - /../outside_secret.txt
+          - /..%2foutside_secret.txt
+          - /%2e%2e/outside_secret.txt
+    timeout_seconds: 5
+    rule_set: http.path_traversal
+    artifact_policy: raw_http_exchange

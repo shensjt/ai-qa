@@ -8,9 +8,10 @@
 
 ## 当前进度
 
-**Phase 0：工程骨架**。已实现 uv 工程、src layout、Pydantic Settings、统一错误模型、结构化日志、Typer CLI、`ai-qa doctor`、Ruff/mypy/pytest/pre-commit/Makefile/CI。
+- **Phase 0：工程骨架**。uv 工程、src layout、Pydantic Settings、统一错误模型、结构化日志、Typer CLI、`ai-qa doctor`、Ruff/mypy/pytest/pre-commit/Makefile/CI。
+- **Phase 1：领域模型与计划校验**。状态枚举、TestPlan / CaseFacts / CaseResult / ToolResult、6 条 HTTP case 的 Catalog、四层校验（Schema/Catalog/Policy/Reference）+ plan_hash、修复预算、SQLite Repository（schema version、WAL、busy_timeout）、防路径逃逸的 Artifact Store。
 
-尚未实现（后续阶段）：领域执行模型、HTTP/wrk 执行器、MCP Server、RAG、DeepSeek Agent、报告。
+尚未实现（后续阶段）：HTTP/wrk 执行器、MCP Server、RAG、DeepSeek Agent、报告与 CLI 运行命令。
 
 ## 环境要求
 
@@ -65,7 +66,9 @@ make check       # lint + typecheck + test
 
 ## 已知限制
 
-- 仅 Phase 0；没有执行器、MCP、RAG 或 LLM。
+- 已完成 Phase 0～1；没有执行器、MCP、RAG 或 LLM。
+- 计划校验与持久化已有单元/集成测试覆盖，但尚未接入 CLI 运行入口（Phase 3 的固定计划 E2E）。
+- 数据库只建立计划、运行、结果、断言、Artifact 五组表；PROJECT/TARGET/SUITE/KNOWLEDGE/TOOL_CALL/PERF 在对应阶段加入。
 - `make test-contract` / `test-e2e` / `eval-rag` 在对应阶段之前没有测试可收集。
 - 示例配置不包含真实 C++ 路径，`doctor` 无法通过。
 - 开发约束见 [CLAUDE.md](CLAUDE.md)，开发流程见 [docs/development.md](docs/development.md)。

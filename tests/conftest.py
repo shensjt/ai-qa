@@ -6,8 +6,11 @@ from typing import Any
 import pytest
 import yaml
 
+from ai_qa.validation.catalog import CaseCatalog, load_catalog
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_CONFIG = REPO_ROOT / "config" / "settings.example.yaml"
+EXAMPLE_CATALOG = REPO_ROOT / "config" / "cases" / "http.yaml"
 
 
 @pytest.fixture
@@ -18,6 +21,11 @@ def repo_root() -> Path:
 @pytest.fixture
 def example_config_path() -> Path:
     return EXAMPLE_CONFIG
+
+
+@pytest.fixture
+def http_catalog() -> CaseCatalog:
+    return load_catalog(EXAMPLE_CATALOG)
 
 
 @pytest.fixture

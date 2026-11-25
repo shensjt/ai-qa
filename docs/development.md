@@ -69,7 +69,7 @@ make doctor       # 对示例配置运行 doctor（预期报错，见 README）
 | Phase | 内容 | 状态 |
 |---|---|---|
 | 0 | 仓库与工程骨架 | 已完成 |
-| 1 | 领域模型、Catalog、Validator、Repository | 未开始 |
+| 1 | 领域模型、Catalog、Validator、Repository | 已完成 |
 | 2 | C++ Target、6 条 HTTP 用例、Rule | 未开始 |
 | 3 | 真实 MCP Server 与固定计划 E2E | 未开始 |
 | 4 | Qwen Embedding、Chroma、BM25 | 未开始 |
@@ -87,12 +87,30 @@ src/ai_qa/
 ├─ settings.py       # Pydantic 配置模型与加载
 ├─ doctor.py         # 只读环境诊断
 ├─ log.py            # JSON 日志与脱敏
-└─ domain/
-   ├─ __init__.py
-   └─ errors.py      # ErrorCode / ErrorInfo / AiQaError / 退出码
+├─ domain/
+│  ├─ enums.py       # 状态枚举与保守聚合
+│  ├─ errors.py      # ErrorCode / ErrorInfo / AiQaError / 退出码
+│  ├─ models.py      # TestRun 与 ID 生成
+│  ├─ plans.py       # TestPlan / ResolvedPlanItem / StoredPlan / plan_hash
+│  └─ results.py     # CaseFacts / Assertion / CaseResult / ToolResult
+├─ validation/
+│  ├─ catalog.py     # Case Catalog 加载与完整性校验
+│  ├─ params.py      # 参数类型与 request-target 安全规则
+│  ├─ policy.py      # 服务端资源上限
+│  ├─ validator.py   # 四层校验 + plan_hash
+│  └─ repair.py      # 修复预算
+├─ persistence/
+│  ├─ database.py    # SQLite engine / Session 工厂（WAL、busy_timeout）
+│  ├─ tables.py      # 五组核心表
+│  ├─ migrations.py  # schema 版本
+│  └─ repositories.py# Plan / Run / Result / Artifact Repository
+├─ artifacts/
+│  └─ store.py       # 原子写入、防路径逃逸
+└─ application/
+   └─ ports.py       # Repository / ArtifactStore 协议
 ```
 
-依赖方向：`cli/doctor` → `settings` → `domain`。`domain` 不导入任何第三方框架。
+依赖方向：`cli/doctor/validation/persistence/artifacts` → `application.ports`/`domain`。`domain` 不导入任何第三方框架；Repository 不跨线程共享 Session。
 
 ## 提交约定
 
